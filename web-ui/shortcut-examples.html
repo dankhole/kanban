@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Redesign Mockup</title>
+  <style>
+    /* ── Reset & Base ── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-app: #1c2127;
+      --bg-surface: #252a31;
+      --bg-raised: #2f343c;
+      --bg-hover: #383e47;
+      --bg-input: #1c2127;
+      --border: #404854;
+      --border-light: #5f6b7c;
+      --text-primary: #f6f7f9;
+      --text-secondary: #abb3bf;
+      --text-muted: #738091;
+      --intent-primary: #4c90f0;
+      --intent-primary-hover: #5ea3ff;
+      --intent-success: #32a467;
+      --intent-success-hover: #3dba78;
+      --intent-warning: #ec9a3c;
+      --intent-danger: #e76a6e;
+      --intent-danger-hover: #fa999c;
+      --col-backlog: #4c90f0;
+      --col-progress: #ec9a3c;
+      --col-review: #32a467;
+      --col-trash: #e76a6e;
+      --radius: 6px;
+      --radius-lg: 10px;
+      --spacing: 4px;
+      --font-xs: 10px;
+      --font-sm: 12px;
+      --font-md: 14px;
+      --font-lg: 16px;
+      --shadow-card: 0 1px 3px rgba(0, 0, 0, .4);
+      --shadow-elevated: 0 4px 12px rgba(0, 0, 0, .5);
+      --transition: 150ms ease;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: var(--font-md);
+      color: var(--text-primary);
+      background: var(--bg-app);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      padding: 16px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo svg {
+      width: 28px;
+      height: 28px;
+      fill: var(--intent-primary);
+    }
+
+    .sidebar-logo .logo-text {
+      font-size: var(--font-lg);
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .sidebar-logo .version {
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      margin-left: auto;
+      background: var(--bg-raised);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Shortcuts Panel ── */
+    .shortcuts-panel {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .shortcuts-title {
+      font-size: var(--font-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .shortcut-group {
+      margin-bottom: 4px;
+    }
+
+    .shortcut-group-label {
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+    }
+
+    .shortcut-row:hover {
+      color: var(--text-primary);
+    }
+
+    .shortcut-keys {
+      display: flex;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+
+    kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 18px;
+      padding: 0 4px;
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .3);
+    }
+
+    .shortcut-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 6px 0;
+    }
+
+    /* ── Show More Toggle ── */
+    .shortcuts-more-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0 2px;
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      font-family: inherit;
+      transition: color var(--transition);
+    }
+
+    .shortcuts-more-toggle:hover {
+      color: var(--text-secondary);
+    }
+
+    .shortcuts-more-toggle .toggle-icon {
+      transition: transform var(--transition);
+      font-size: 8px;
+    }
+
+    .shortcuts-more-toggle.open .toggle-icon {
+      transform: rotate(90deg);
+    }
+
+    .shortcuts-collapsible {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 250ms ease;
+    }
+
+    .shortcuts-collapsible.open {
+      max-height: 400px;
+    }
+
+    /* ── Projects ── */
+    .sidebar-section-title {
+      font-size: var(--font-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      padding: 14px 16px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-section-title button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: var(--font-md);
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+
+    .sidebar-section-title button:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .project-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: background var(--transition);
+    }
+
+    .project-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .project-item.active {
+      background: var(--bg-raised);
+      border-left-color: var(--intent-primary);
+    }
+
+    .project-name {
+      font-size: var(--font-md);
+      font-weight: 600;
+    }
+
+    .project-path {
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .project-badges {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: var(--font-xs);
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: #fff;
+    }
+
+    .badge-b {
+      background: var(--col-backlog);
+    }
+
+    .badge-p {
+      background: var(--col-progress);
+    }
+
+    .badge-r {
+      background: var(--col-review);
+    }
+
+    .badge-t {
+      background: var(--col-trash);
+    }
+
+    /* ── Main Board ── */
+    .board-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top Bar ── */
+    .topbar {
+      height: 44px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .topbar-project {
+      font-weight: 600;
+      font-size: var(--font-md);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .topbar-branch {
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      background: var(--bg-raised);
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .topbar-branch svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .topbar-stats {
+      margin-left: auto;
+      display: flex;
+      gap: 12px;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+    }
+
+    /* ── Columns ── */
+    .columns {
+      flex: 1;
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+      overflow-x: auto;
+    }
+
+    .column {
+      flex: 1;
+      min-width: 340px;
+      background: var(--bg-app);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .column-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 2px solid transparent;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+
+    .column-header .col-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .column-header .col-title {
+      font-weight: 700;
+      font-size: var(--font-md);
+    }
+
+    .column-header .col-count {
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      background: var(--bg-raised);
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .column-header .col-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+    }
+
+    .col-action-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      font-size: var(--font-sm);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all var(--transition);
+    }
+
+    .col-action-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+      border-color: var(--border);
+    }
+
+    .col-action-btn.success-action {
+      color: var(--intent-success);
+      border-color: rgba(50, 164, 103, .3);
+    }
+
+    .col-action-btn.success-action:hover {
+      background: rgba(50, 164, 103, .15);
+      border-color: rgba(50, 164, 103, .5);
+    }
+
+    .column-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .column-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .column-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .column-body::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    /* ── Task Input (Backlog) ── */
+    .task-input-area {
+      padding: 8px;
+      flex-shrink: 0;
+    }
+
+    .task-input-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: border-color var(--transition);
+    }
+
+    .task-input-card:focus-within {
+      border-color: var(--intent-primary);
+      box-shadow: 0 0 0 1px var(--intent-primary);
+    }
+
+    .task-input-textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 12px 14px;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: var(--font-md);
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+    }
+
+    .task-input-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .task-input-hint {
+      padding: 4px 14px 8px;
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .file-ref {
+      background: var(--bg-raised);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+    }
+
+    .task-input-options {
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .task-option {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: var(--font-sm);
+    }
+
+    .task-option input[type="checkbox"] {
+      accent-color: var(--intent-primary);
+      width: 14px;
+      height: 14px;
+    }
+
+    .task-input-select {
+      background: var(--bg-raised);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: var(--font-sm);
+      font-family: inherit;
+    }
+
+    .task-input-actions {
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    .task-input-actions-spacer {
+      flex: 1;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: var(--font-sm);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn-minimal {
+      background: none;
+      color: var(--text-muted);
+      border-color: transparent;
+      padding: 5px 8px;
+    }
+
+    .btn-minimal:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .btn-outlined {
+      background: transparent;
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    .btn-outlined:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-light);
+    }
+
+    .btn-primary {
+      background: var(--intent-primary);
+      color: #fff;
+      border-color: var(--intent-primary);
+      padding: 5px 12px;
+    }
+
+    .btn-primary:hover {
+      background: var(--intent-primary-hover);
+    }
+
+    .btn-success {
+      background: var(--intent-success);
+      color: #fff;
+    }
+
+    .btn-success:hover {
+      background: var(--intent-success-hover);
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+
+    .card:hover {
+      border-color: var(--border-light);
+      box-shadow: var(--shadow-card);
+    }
+
+    .card-main {
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .card-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .card-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-title {
+      font-size: var(--font-sm);
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-primary);
+    }
+
+    .card-summary {
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      margin-top: 3px;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .card-tag {
+      font-size: var(--font-xs);
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--bg-raised);
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .card-tag.tag-linked {
+      color: var(--intent-primary);
+      background: rgba(76, 144, 240, .15);
+    }
+
+    .card-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .card-chevron {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      transition: transform var(--transition);
+      width: 14px;
+      text-align: center;
+    }
+
+    .card.expanded .card-chevron {
+      transform: rotate(90deg);
+    }
+
+    .card-action-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: var(--font-xs);
+      line-height: 1;
+      opacity: 0;
+      transition: opacity var(--transition), color var(--transition), background var(--transition);
+    }
+
+    .card:hover .card-action-btn {
+      opacity: 1;
+    }
+
+    .card-action-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .card-action-btn.danger:hover {
+      color: var(--intent-danger);
+    }
+
+    .card-action-btn.approve:hover {
+      color: var(--intent-success);
+    }
+
+    /* ── Card Expanded Detail ── */
+    .card-detail {
+      display: none;
+      padding: 0 12px 10px 28px;
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .card.expanded .card-detail {
+      display: block;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    .card-detail-text {
+      max-height: 180px;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+
+    .card-detail-text::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .card-detail-text::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    .card-detail-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+
+    /* ── Empty column state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .empty-state-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+      opacity: .4;
+    }
+
+    .empty-state-text {
+      font-size: var(--font-sm);
+      line-height: 1.5;
+    }
+
+    .empty-state-hint {
+      font-size: var(--font-xs);
+      margin-top: 6px;
+    }
+
+    .empty-state-hint kbd {
+      font-size: 9px;
+    }
+
+    /* ── Sidebar Quick Actions ── */
+    .sidebar-palette {
+      padding: 12px 16px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .palette-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 7px 10px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-family: inherit;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .palette-btn:hover {
+      border-color: var(--border-light);
+      color: var(--text-secondary);
+    }
+
+    .palette-keys {
+      display: flex;
+      gap: 2px;
+    }
+
+    .quick-actions {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .quick-actions-title {
+      font-size: var(--font-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .qa-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 8px;
+      background: none;
+      border: none;
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+      font-family: inherit;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .qa-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .qa-btn .qa-icon {
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .qa-btn .qa-label {
+      flex: 1;
+      text-align: left;
+    }
+
+    .qa-btn .qa-keys {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .qa-btn.qa-highlight {
+      color: var(--intent-primary);
+    }
+
+    .qa-btn.qa-highlight:hover {
+      background: rgba(76, 144, 240, .1);
+    }
+
+    /* ── Selection for batch ── */
+    .card-checkbox {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--intent-primary);
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .card.selected {
+      border-color: var(--intent-primary);
+      background: rgba(76, 144, 240, .05);
+    }
+
+    /* ── Tooltip ── */
+    [data-tooltip] {
+      position: relative;
+    }
+
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-raised);
+      color: var(--text-primary);
+      font-size: var(--font-xs);
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      box-shadow: var(--shadow-elevated);
+      border: 1px solid var(--border);
+      z-index: 100;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!-- SIDEBAR                                      -->
+  <!-- ════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg viewBox="0 0 24 24">
+        <rect x="2" y="3" width="6" height="18" rx="1.5" />
+        <rect x="9" y="3" width="6" height="12" rx="1.5" />
+        <rect x="16" y="3" width="6" height="15" rx="1.5" />
+      </svg>
+      <span class="logo-text">kanban</span>
+      <span class="version">v0.1.10</span>
+    </div>
+
+    <!-- ── Command Palette ── -->
+    <div class="sidebar-palette">
+      <button class="palette-btn">
+        <span>Command Palette</span>
+        <span class="palette-keys"><kbd>&#x2318;</kbd><kbd>K</kbd></span>
+      </button>
+    </div>
+
+    <!-- ── Quick Actions ── -->
+    <div class="quick-actions">
+      <div class="quick-actions-title">Quick Actions</div>
+      <button class="qa-btn qa-highlight"><span class="qa-icon">+</span><span class="qa-label">New task</span><span
+          class="qa-keys"><kbd>C</kbd></span></button>
+      <button class="qa-btn qa-highlight"><span class="qa-icon">&#x25B6;</span><span class="qa-label">/start all
+          backlog</span><span class="qa-keys"><kbd>&#x21E7;</kbd><kbd>S</kbd></span></button>
+      <button class="qa-btn"><span class="qa-icon">&#x2192;</span><span class="qa-label">Move selected</span><span
+          class="qa-keys"><kbd>&#x2318;</kbd><kbd>&#x2192;</kbd></span></button>
+      <button class="qa-btn"><span class="qa-icon">&#x2713;</span><span class="qa-label">Approve all reviews</span><span
+          class="qa-keys"><kbd>&#x2318;</kbd><kbd>&#x21E7;</kbd><kbd>A</kbd></span></button>
+      <button class="qa-btn"><span class="qa-icon">&#x1F5D1;</span><span class="qa-label">Empty trash</span><span
+          class="qa-keys"><kbd>&#x2318;</kbd><kbd>&#x21E7;</kbd><kbd>&#x232B;</kbd></span></button>
+    </div>
+
+    <!-- ── Keyboard Shortcuts (collapsible) ── -->
+    <div class="shortcuts-panel">
+      <button class="shortcuts-more-toggle" id="shortcutsToggle" onclick="toggleShortcuts()">
+        <span class="toggle-icon">&#x203A;</span>
+        <span class="toggle-label">All keyboard shortcuts</span>
+      </button>
+
+      <div class="shortcuts-collapsible" id="shortcutsMore">
+        <div class="shortcut-divider"></div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-label">Create & Edit</div>
+          <div class="shortcut-row"><span>New task</span><span class="shortcut-keys"><kbd>C</kbd></span></div>
+          <div class="shortcut-row"><span>Quick task (no form)</span><span
+              class="shortcut-keys"><kbd>&#x21E7;</kbd><kbd>C</kbd></span></div>
+          <div class="shortcut-row"><span>Edit selected</span><span class="shortcut-keys"><kbd>E</kbd></span></div>
+          <div class="shortcut-row"><span>Delete</span><span class="shortcut-keys"><kbd>&#x232B;</kbd></span></div>
+        </div>
+
+        <div class="shortcut-divider"></div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-label">Navigate</div>
+          <div class="shortcut-row"><span>Between tasks</span><span
+              class="shortcut-keys"><kbd>&#x2191;</kbd><kbd>&#x2193;</kbd></span></div>
+          <div class="shortcut-row"><span>Between columns</span><span
+              class="shortcut-keys"><kbd>&#x2190;</kbd><kbd>&#x2192;</kbd></span></div>
+          <div class="shortcut-row"><span>Expand / collapse</span><span class="shortcut-keys"><kbd>&#x21B5;</kbd> /
+              <kbd>Esc</kbd></span></div>
+        </div>
+
+        <div class="shortcut-divider"></div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-label">Agentic Actions</div>
+          <div class="shortcut-row"><span>Start selected</span><span class="shortcut-keys"><kbd>S</kbd></span></div>
+          <div class="shortcut-row"><span>Start all backlog</span><span
+              class="shortcut-keys"><kbd>&#x21E7;</kbd><kbd>S</kbd></span></div>
+          <div class="shortcut-row"><span>/start command</span><span
+              class="shortcut-keys"><kbd>/</kbd><kbd>s</kbd></span></div>
+          <div class="shortcut-row"><span>Multi-select</span><span
+              class="shortcut-keys"><kbd>&#x2318;</kbd><kbd>click</kbd></span></div>
+          <div class="shortcut-row"><span>Select all in column</span><span
+              class="shortcut-keys"><kbd>&#x2318;</kbd><kbd>A</kbd></span></div>
+        </div>
+
+        <div class="shortcut-divider"></div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-label">Batch Ops</div>
+          <div class="shortcut-row"><span>Move &#x2192; In Progress</span><span
+              class="shortcut-keys"><kbd>&#x2318;</kbd><kbd>&#x2192;</kbd></span></div>
+          <div class="shortcut-row"><span>Move &#x2192; Review</span><span
+              class="shortcut-keys"><kbd>&#x2318;</kbd><kbd>&#x21E7;</kbd><kbd>&#x2192;</kbd></span></div>
+          <div class="shortcut-row"><span>Trash selected</span><span
+              class="shortcut-keys"><kbd>&#x2318;</kbd><kbd>&#x232B;</kbd></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Projects ── -->
+    <div class="sidebar-section-title">
+      Projects
+      <button>+</button>
+    </div>
+    <div class="project-item active">
+      <div class="project-name">cline</div>
+      <div class="project-path">~/cline</div>
+      <div class="project-badges">
+        <span class="badge badge-b">B 7</span>
+        <span class="badge badge-r">R 3</span>
+        <span class="badge badge-t">T 3</span>
+      </div>
+    </div>
+    <div class="project-item">
+      <div class="project-name">sdk-wip</div>
+      <div class="project-path">~/sdk-wip</div>
+      <div class="project-badges">
+        <span class="badge badge-r">R 1</span>
+        <span class="badge badge-t">T 1</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!-- MAIN BOARD                                   -->
+  <!-- ════════════════════════════════════════════ -->
+  <main class="board-area">
+
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="topbar-project">~/cline</div>
+      <div class="topbar-branch">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path
+            d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 9.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm7-9.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM4.25 5.5a1.75 1.75 0 1 0-.001-3.501A1.75 1.75 0 0 0 4.25 5.5ZM4.25 14a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm7.75-9.75a1.75 1.75 0 1 0-3.5 0 1.75 1.75 0 0 0 3.5 0ZM3.5 6.25v4a.75.75 0 0 0 1.5 0v-4a.75.75 0 0 0-1.5 0Zm7.75-.75a.75.75 0 0 0-.75.75v1.5a2.25 2.25 0 0 1-2.25 2.25H6.5a.75.75 0 0 0 0 1.5h1.75A3.75 3.75 0 0 0 12 7.75v-1.5a.75.75 0 0 0-.75-.75Z" />
+        </svg>
+        main
+      </div>
+      <span style="font-size:var(--font-sm); color:var(--text-muted)">(5 files +149 &#x2212;53)</span>
+      <div class="topbar-stats">
+        <span><kbd>&#x2318;</kbd><kbd>K</kbd> Command Palette</span>
+      </div>
+    </div>
+
+    <!-- ── Columns ── -->
+    <div class="columns">
+
+      <!-- ─── BACKLOG ─── -->
+      <div class="column">
+        <div class="column-header">
+          <div class="col-indicator" style="background:var(--col-backlog)"></div>
+          <span class="col-title">Backlog</span>
+          <span class="col-count">7</span>
+          <div class="col-actions">
+            <button class="col-action-btn success-action" data-tooltip="Start all tasks (&#x21E7;S)">
+              &#x25B6; Start All
+            </button>
+          </div>
+        </div>
+
+        <!-- Task Input -->
+        <div class="task-input-area">
+          <div class="task-input-card">
+            <textarea class="task-input-textarea"
+              placeholder="Describe your task...&#10;&#10;Supports markdown, @file references, and multi-line descriptions."></textarea>
+            <div class="task-input-hint">Use <span class="file-ref">@file</span> to reference files</div>
+            <div class="task-input-options">
+              <label class="task-option"><input type="checkbox"> Plan mode</label>
+              <label class="task-option"><input type="checkbox" checked> Auto-start</label>
+              <select class="task-input-select">
+                <option>Make commit</option>
+                <option>Create PR</option>
+                <option>Dry run</option>
+              </select>
+            </div>
+            <div class="task-input-actions">
+              <button class="btn btn-outlined">Cancel <kbd>esc</kbd></button>
+              <div class="task-input-actions-spacer"></div>
+              <button class="btn btn-outlined">Save <kbd>&#x2318;&#x21B5;</kbd></button>
+              <button class="btn btn-primary">Start <kbd>&#x2318;&#x21E7;&#x21B5;</kbd></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Backlog Cards -->
+        <div class="column-body">
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Keyboard shortcuts & left panel display</div>
+                <div class="card-summary">Bulk start, linking shortcut, discoverable in left panel</div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Add keyboard shortcuts for bulk start, create linking shortcuts, and make
+                them discoverable in the left panel shortcuts section.</div>
+              <div class="card-detail-actions">
+                <button class="btn btn-primary" style="padding:4px 10px">&#x25B6; Start</button>
+                <button class="btn btn-outlined" style="padding:4px 10px">Edit</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Larger task description input box</div>
+                <div class="card-summary">Support longer descriptions with bullet points</div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Expand the task creation textarea to support longer descriptions with
+                markdown and bullet points.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Breakdown task from long description</div>
+                <div class="card-summary">High priority &#x2014; auto-split descriptions into tasks</div>
+                <div class="card-meta-row"><span class="card-tag"
+                    style="color:var(--intent-warning);background:rgba(236,154,60,.15)">high priority</span></div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Auto-split long descriptions into sub-tasks. High priority feature for
+                managing complex work.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Terminal in Kanban &#x2014; clarify use case</div>
+                <div class="card-summary">Placeholder, needs Saoud's input</div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Define the terminal integration use case. Currently a placeholder &#x2014;
+                needs input from Saoud.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Update UI to Jose's visual design</div>
+                <div class="card-summary">Polish the current UI</div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Align the current Kanban UI to Jose's visual design mockups.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <input type="checkbox" class="card-checkbox" onclick="event.stopPropagation()">
+              <div class="card-status-dot" style="background:var(--col-backlog)"></div>
+              <div class="card-content">
+                <div class="card-title">Onboarding flow</div>
+                <div class="card-summary">Placeholder, needs more definition</div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Start" onclick="event.stopPropagation()">&#x25B6;</button>
+                <button class="card-action-btn danger" data-tooltip="Delete"
+                  onclick="event.stopPropagation()">&#x1F5D1;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Define and implement the onboarding flow for new Kanban users.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── IN PROGRESS ─── -->
+      <div class="column">
+        <div class="column-header">
+          <div class="col-indicator" style="background:var(--col-progress)"></div>
+          <span class="col-title">In Progress</span>
+          <span class="col-count">0</span>
+        </div>
+        <div class="column-body">
+          <div class="empty-state">
+            <div class="empty-state-icon">&#x26A1;</div>
+            <div class="empty-state-text">No active tasks</div>
+            <div class="empty-state-hint">
+              Press <kbd>&#x21E7;</kbd><kbd>S</kbd> to start all backlog tasks<br>
+              or select tasks and press <kbd>S</kbd>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── REVIEW ─── -->
+      <div class="column">
+        <div class="column-header">
+          <div class="col-indicator" style="background:var(--col-review)"></div>
+          <span class="col-title">Review</span>
+          <span class="col-count">3</span>
+          <div class="col-actions">
+            <button class="col-action-btn" data-tooltip="Approve all">&#x2713; Approve All</button>
+          </div>
+        </div>
+        <div class="column-body">
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-review)"></div>
+              <div class="card-content">
+                <div class="card-title">CLINE-1511: Cannot create files with no UI buttons</div>
+                <div class="card-summary"><code>processToolUseDelta</code> uses <code>delta.id</code> as the Map key.
+                  When a second chunk arrives with the same id, it appends <code>delta.input</code> to
+                  <code>pending.input</code>, causing duplicate arguments...</div>
+                <div class="card-meta-row">
+                  <span class="card-tag tag-linked">linear</span>
+                  <span class="card-tag">+3 files</span>
+                </div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn approve" data-tooltip="Approve"
+                  onclick="event.stopPropagation()">&#x2713;</button>
+                <button class="card-action-btn danger" data-tooltip="Reject"
+                  onclick="event.stopPropagation()">&#x2717;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">
+                <strong>Issue:</strong> CLINE-1511 &#x2014;
+                cline-with-gpt-54-cannot-create-files-no-ui-buttons-for-allow<br><br>
+                <strong>Root cause:</strong> <code>processToolUseDelta</code> uses <code>delta.id</code> as the Map key.
+                When a second chunk arrives with the same <code>id</code>, it finds the existing entry and appends
+                <code>delta.input</code> to <code>pending.input</code>. This means the native handler IS sending
+                duplicate arguments via <code>output_item.done</code>, and they ARE being appended.<br><br>
+                <strong>Fix:</strong> Check if the native handler has been tested with GPT-5.4 or if this is an existing
+                latent bug. Looking at the native handler&#x2019;s <code>response.output_item.done</code> yield more
+                carefully (lines 541&#x2013;552): it yields <code>item.arguments</code> which is the COMPLETE arguments
+                string...
+              </div>
+              <div class="card-detail-actions">
+                <button class="btn btn-success" style="padding:4px 10px">&#x2713; Approve & Merge</button>
+                <button class="btn btn-outlined" style="padding:4px 10px">View Diff</button>
+                <button class="btn btn-minimal" style="padding:4px 10px;color:var(--intent-danger)">&#x2717;
+                  Reject</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-review)"></div>
+              <div class="card-content">
+                <div class="card-title">Break into tasks: parse linear complaints</div>
+                <div class="card-summary">Shortcuts to bulk start all tasks, show shortcuts clearly in kanban view.
+                  Created 7 tasks in backlog.</div>
+                <div class="card-meta-row">
+                  <span class="card-tag">auto-generated</span>
+                  <span class="card-tag">7 tasks created</span>
+                </div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn approve" data-tooltip="Approve"
+                  onclick="event.stopPropagation()">&#x2713;</button>
+                <button class="card-action-btn danger" data-tooltip="Reject"
+                  onclick="event.stopPropagation()">&#x2717;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">
+                Linear complaints shortcuts to bulk start all tasks, show shortcuts clearly in the kanban view.<br><br>
+                Created 7 tasks in backlog:<br>
+                1. Keyboard shortcuts & left panel display (<code>c8aba</code>)<br>
+                2. Larger task description input box (<code>c8aba</code>)<br>
+                3. Breakdown task from long description (<code>555e9</code>)<br>
+                4. Terminal in Kanban (<code>a3c27</code>)<br>
+                5. Update UI to Jose&#x2019;s visual design (<code>fb016</code>)<br>
+                6. Onboarding flow (<code>1bffd</code>)
+              </div>
+              <div class="card-detail-actions">
+                <button class="btn btn-success" style="padding:4px 10px">&#x2713; Approve</button>
+                <button class="btn btn-outlined" style="padding:4px 10px">View Details</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-review)"></div>
+              <div class="card-content">
+                <div class="card-title">Fix: show trash button loading state</div>
+                <div class="card-summary">Trash button now shows a loading spinner during delete. Previously appeared
+                  unresponsive.</div>
+                <div class="card-meta-row">
+                  <span class="card-tag">bug fix</span>
+                  <span class="card-tag">+1 file</span>
+                </div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn approve" data-tooltip="Approve"
+                  onclick="event.stopPropagation()">&#x2713;</button>
+                <button class="card-action-btn danger" data-tooltip="Reject"
+                  onclick="event.stopPropagation()">&#x2717;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">
+                Fixed the trash button to show a loading spinner while the delete operation is in progress. Previously
+                the button appeared unresponsive during deletion.
+              </div>
+              <div class="card-detail-actions">
+                <button class="btn btn-success" style="padding:4px 10px">&#x2713; Approve</button>
+                <button class="btn btn-outlined" style="padding:4px 10px">View Diff</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ─── TRASH ─── -->
+      <div class="column">
+        <div class="column-header">
+          <div class="col-indicator" style="background:var(--col-trash)"></div>
+          <span class="col-title">Trash</span>
+          <span class="col-count">3</span>
+          <div class="col-actions">
+            <button class="col-action-btn" style="color:var(--intent-danger)" data-tooltip="Empty trash">&#x1F5D1;
+              Empty</button>
+          </div>
+        </div>
+        <div class="column-body">
+
+          <div class="card" style="opacity:.65">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-trash)"></div>
+              <div class="card-content">
+                <div class="card-title" style="text-decoration:line-through;color:var(--text-muted)">Old auth middleware
+                  cleanup</div>
+                <div class="card-summary">Replaced by new compliance-driven implementation</div>
+                <div class="card-meta-row"><span class="card-tag" style="font-size:9px">deleted 2d ago</span></div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Restore"
+                  onclick="event.stopPropagation()">&#x21A9;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Previous auth middleware that was replaced by the new compliance-driven
+                implementation.</div>
+              <div class="card-detail-actions">
+                <button class="btn btn-outlined" style="padding:4px 10px">&#x21A9; Restore</button>
+                <button class="btn btn-minimal" style="padding:4px 10px;color:var(--intent-danger)">Delete
+                  Forever</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="opacity:.65">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-trash)"></div>
+              <div class="card-content">
+                <div class="card-title" style="text-decoration:line-through;color:var(--text-muted)">Stale session token
+                  migration</div>
+                <div class="card-summary">Superseded by the new auth flow</div>
+                <div class="card-meta-row"><span class="card-tag" style="font-size:9px">deleted 3d ago</span></div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Restore"
+                  onclick="event.stopPropagation()">&#x21A9;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">Migration script for session tokens &#x2014; superseded by the new auth
+                flow.</div>
+            </div>
+          </div>
+
+          <div class="card" style="opacity:.65">
+            <div class="card-main" onclick="toggleCard(this)">
+              <div class="card-status-dot" style="background:var(--col-trash)"></div>
+              <div class="card-content">
+                <div class="card-title" style="text-decoration:line-through;color:var(--text-muted)">Deprecated API
+                  endpoint v1</div>
+                <div class="card-summary">Removed as part of the v2 migration</div>
+                <div class="card-meta-row"><span class="card-tag" style="font-size:9px">deleted 5d ago</span></div>
+              </div>
+              <div class="card-right">
+                <button class="card-action-btn" data-tooltip="Restore"
+                  onclick="event.stopPropagation()">&#x21A9;</button>
+                <div class="card-chevron">&#x203A;</div>
+              </div>
+            </div>
+            <div class="card-detail">
+              <div class="card-detail-text">v1 API endpoints removed as part of the v2 migration.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+
+  </main>
+
+  <script>
+    function toggleCard(mainEl) {
+      mainEl.closest('.card').classList.toggle('expanded');
+    }
+
+    document.querySelectorAll('.card-checkbox').forEach(cb => {
+      cb.addEventListener('change', function () {
+        this.closest('.card').classList.toggle('selected', this.checked);
+      });
+    });
+
+    function toggleShortcuts() {
+      const btn = document.getElementById('shortcutsToggle');
+      const panel = document.getElementById('shortcutsMore');
+      const isOpen = panel.classList.toggle('open');
+      btn.classList.toggle('open', isOpen);
+      btn.querySelector('.toggle-label').textContent = isOpen ? 'Show fewer shortcuts' : 'Show more shortcuts';
+    }
+  </script>
+
+</body>
+
+</html>

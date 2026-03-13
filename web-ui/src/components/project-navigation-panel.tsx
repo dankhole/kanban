@@ -1,9 +1,12 @@
 import { Alert, AnchorButton, Button, Classes, Colors, CompoundTag, Icon, Intent } from "@blueprintjs/core";
 import { useState } from "react";
 
+import { QuickActionsPanel } from "@/components/sidebar/quick-actions-panel";
 import { panelSeparatorColor } from "@/data/column-colors";
 import type { RuntimeProjectSummary } from "@/runtime/types";
 import { formatPathForDisplay } from "@/utils/path-display";
+import { Divider } from "./sidebar/divider";
+import { KeyboardShortcutsPanel } from "./sidebar/keyboard-shortcuts-panel";
 
 const GITHUB_URL = "https://github.com/cline/kanban";
 
@@ -81,6 +84,12 @@ export function ProjectNavigationPanel({
 					</div>
 				</div>
 			</div>
+
+			<QuickActionsPanel />
+			<Divider />
+
+			<KeyboardShortcutsPanel />
+			<Divider />
 
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 12px" }}>
 				<span className={Classes.TEXT_MUTED} style={{ fontSize: "var(--bp-typography-size-body-medium)" }}>

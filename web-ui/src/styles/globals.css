@@ -351,7 +351,7 @@ body.kb-dependency-link-mode {
 	padding-bottom: 4px;
 }
 
-.kb-diff-entry + .kb-diff-entry {
+.kb-diff-entry+.kb-diff-entry {
 	border-top: 1px solid var(--bp-palette-dark-gray-5);
 }
 
@@ -467,8 +467,8 @@ body.kb-dependency-link-mode {
 	background: none;
 }
 
-.kb-git-ref-row + .kb-git-ref-row,
-.kb-git-ref-row + div + .kb-git-ref-row {
+.kb-git-ref-row+.kb-git-ref-row,
+.kb-git-ref-row+div+.kb-git-ref-row {
 	margin-top: 4px;
 }
 
@@ -515,13 +515,17 @@ body.kb-dependency-link-mode {
 
 /* -- Terminal scrollbar (xterm 6 custom scrollable element) -- */
 
-.kb-terminal-container .xterm .xterm-scrollable-element > .scrollbar.vertical {
+.kb-terminal-container .xterm .xterm-scrollable-element>.scrollbar.vertical {
 	width: 10px !important;
 	right: 1px !important;
 }
 
-.kb-terminal-container .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+.kb-terminal-container .xterm .xterm-scrollable-element>.scrollbar.vertical>.slider {
 	left: 2px !important;
 	width: 6px !important;
 	border-radius: 999px;
+}
+
+.w-full {
+	width: 100%
 }
