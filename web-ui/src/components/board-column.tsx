@@ -7,6 +7,26 @@ import { columnAccentColors, columnLightColors, panelSeparatorColor } from "@/da
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { isCardDropDisabled, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
 import type { BoardCard as BoardCardModel, BoardColumnId, BoardColumn as BoardColumnModel } from "@/types";
+import { KBD } from "./KBD";
+import styles from './board-column.module.css';
+
+const InProgressEmptyState = () => (
+	<div className={styles['empty-state']}>
+		<div className={styles["empty-state-icon"]}>&#x26A1;</div>
+		<div className={styles["empty-state-text"]}>No active tasks</div>
+		<div className={styles["empty-state-hint"]}>
+			Press <KBD>&#x21E7;</KBD><KBD>S</KBD> to start all backlog tasks
+			or select tasks and press <KBD>S</KBD>
+		</div>
+	</div>
+)
+
+const EmptyState: Record<BoardColumnId, ReactNode> = {
+	'in_progress': <InProgressEmptyState />,
+	backlog: <></>,
+	'review': <></>,
+	"trash": <></>
+}
 
 export function BoardColumn({
 	column,
@@ -152,6 +172,8 @@ export function BoardColumn({
 								/>
 							) : null}
 							{inlineTaskCreator}
+
+							{column.cards.length === 0 && (EmptyState[column.id])}
 
 							{(() => {
 								const items: ReactNode[] = [];
