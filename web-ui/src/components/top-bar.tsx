@@ -343,8 +343,8 @@ export function TopBar({
 							size="sm"
 							icon={<Code size={16} />}
 							onClick={onToggleCodeBrowser}
-							aria-label={isCodeBrowserOpen ? "Close code browser" : "Open code browser"}
-							className={isCodeBrowserOpen ? "ring-1 ring-accent ml-1" : "ml-1"}
+							aria-label={isCodeBrowserOpen ? "Close code browsers" : "Open code browsers"}
+							className={isCodeBrowserOpen ? "ring-1 ring-accent ml-3" : "ml-3"}
 						/>
 					</Tooltip>
 				) : null}
