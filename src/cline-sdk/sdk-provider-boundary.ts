@@ -301,6 +301,18 @@ export function createSdkInMemoryMcpManager(options: SdkMcpManagerOptions): SdkM
 	return new managerConstructor(options);
 }
 
+/**
+ * Sanitize an MCP tool name so it conforms to the Anthropic API constraint
+ * (`^[a-zA-Z0-9_-]{1,128}$`).  The MCP spec allows dots and slashes in
+ * server/tool names, but the model API does not.
+ */
+function sanitizeMcpToolName(input: { serverName: string; toolName: string }): string {
+	return `${input.serverName}__${input.toolName}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
+}
+
 export async function createSdkMcpTools(options: SdkCreateMcpToolsOptions): Promise<SdkMcpTool[]> {
-	return await createMcpTools(options);
+	return await createMcpTools({
+		...options,
+		nameTransform: options.nameTransform ?? sanitizeMcpToolName,
+	});
 }
