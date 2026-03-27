@@ -295,6 +295,40 @@ describe("applyClineSessionEvent", () => {
 		expect(result.messages[0]?.content).toBe("Done. Added the comment.");
 	});
 
+	it("adds a turn usage status message when done events include usage", () => {
+		const entry = createEntry("task-1");
+		entry.summary.state = "running";
+
+		const result = applyEvent({
+			entry,
+			event: {
+				type: "agent_event",
+				payload: {
+					sessionId: "session-1",
+					event: {
+						type: "done",
+						reason: "completed",
+						text: "Applied the change.",
+						iterations: 3,
+						usage: {
+							inputTokens: 120,
+							outputTokens: 45,
+							cacheReadTokens: 20,
+							cacheWriteTokens: 10,
+							cost: 0.0123,
+						},
+					},
+				},
+			},
+		});
+
+		expect(result.messages).toHaveLength(2);
+		expect(result.messages[1]?.role).toBe("status");
+		expect(result.messages[1]?.content).toBe(
+			"Done (completed) • iterations=3 • input=120 • output=45 • cache read=20 • cache write=10 • cost=$0.0123",
+		);
+	});
+
 	it("keeps the previous preview when done events have no final text", () => {
 		const entry = createEntry("task-1");
 		entry.summary.state = "running";
