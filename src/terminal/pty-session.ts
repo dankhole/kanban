@@ -4,7 +4,7 @@ import {
 	buildWindowsCmdArgsCommandLine,
 	resolveWindowsComSpec,
 	shouldUseWindowsCmdLaunch,
-} from "../core/windows-cmd-launch.js";
+} from "../core/windows-cmd-launch";
 
 const MAX_HISTORY_BYTES = 1024 * 1024;
 
@@ -101,9 +101,7 @@ export class PtySession {
 		const terminalName = env?.TERM?.trim() || process.env.TERM?.trim() || "xterm-256color";
 		const useWindowsShellLaunch = shouldUseWindowsCmdLaunch(binary);
 		const spawnBinary = useWindowsShellLaunch ? resolveWindowsComSpec() : binary;
-		const spawnArgs = useWindowsShellLaunch
-			? buildWindowsCmdArgsCommandLine(binary, normalizedArgs)
-			: normalizedArgs;
+		const spawnArgs = useWindowsShellLaunch ? buildWindowsCmdArgsCommandLine(binary, normalizedArgs) : normalizedArgs;
 		const ptyOptions: pty.IPtyForkOptions = {
 			name: terminalName,
 			cwd,

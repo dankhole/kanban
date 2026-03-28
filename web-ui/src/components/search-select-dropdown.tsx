@@ -138,9 +138,7 @@ export function SearchSelectDropdown({
 		if (trimmedQuery.length === 0) {
 			return null;
 		}
-		const hasExactMatch = orderedOptions.some(
-			(option) => option.value.toLowerCase() === trimmedQuery.toLowerCase(),
-		);
+		const hasExactMatch = orderedOptions.some((option) => option.value.toLowerCase() === trimmedQuery.toLowerCase());
 		if (hasExactMatch) {
 			return null;
 		}
@@ -296,7 +294,9 @@ export function SearchSelectDropdown({
 				}}
 				className={cn(
 					"flex w-full items-center gap-2 px-2.5 py-1.5 text-[13px] rounded-md text-left",
-					isActive ? "bg-surface-3 text-text-primary" : "text-text-secondary hover:bg-surface-3 hover:text-text-primary",
+					isActive
+						? "bg-surface-3 text-text-primary"
+						: "text-text-secondary hover:bg-surface-3 hover:text-text-primary",
 				)}
 				onMouseEnter={() => setActiveOptionIndex(optionIndex)}
 				onClick={() => {
@@ -372,7 +372,9 @@ export function SearchSelectDropdown({
 										{recommendedHeading}
 									</div>
 								) : null}
-								{(showRecommendedSection ? recommendedItems : filteredItems).map((option) => renderOptionButton(option))}
+								{(showRecommendedSection ? recommendedItems : filteredItems).map((option) =>
+									renderOptionButton(option),
+								)}
 								{showRecommendedSection && recommendedItems.length > 0 && otherItems.length > 0 ? (
 									<>
 										<div className="my-1 border-t border-border" />
@@ -381,7 +383,9 @@ export function SearchSelectDropdown({
 										</div>
 									</>
 								) : null}
-								{showRecommendedSection && otherItems.length > 0 ? otherItems.map((option) => renderOptionButton(option)) : null}
+								{showRecommendedSection && otherItems.length > 0
+									? otherItems.map((option) => renderOptionButton(option))
+									: null}
 								{customValueOption ? (
 									<>
 										<div className="my-1 border-t border-border" />

@@ -1,22 +1,21 @@
 // Owns the Cline-specific settings state machine inside the settings dialog.
 // It loads provider data, drives model selection, saves settings, and runs
 // OAuth login flows so the dialog component can stay presentation-focused.
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
+import { getRuntimeClineProviderSettings } from "@/runtime/native-agent";
 import {
 	fetchClineProviderCatalog,
 	fetchClineProviderModels,
 	runClineProviderOauthLogin,
 	saveClineProviderSettings,
 } from "@/runtime/runtime-config-query";
-import { getRuntimeClineProviderSettings } from "@/runtime/native-agent";
 import type {
 	RuntimeAgentId,
 	RuntimeClineOauthProvider,
-	RuntimeClineReasoningEffort,
 	RuntimeClineProviderCatalogItem,
 	RuntimeClineProviderModel,
 	RuntimeClineProviderSettings,
+	RuntimeClineReasoningEffort,
 	RuntimeConfigResponse,
 } from "@/runtime/types";
 
@@ -91,10 +90,7 @@ function getEffectiveProviderSettings(
 	return override ?? getRuntimeClineProviderSettings(config);
 }
 
-function getDefaultModelIdForProvider(
-	providers: RuntimeClineProviderCatalogItem[],
-	providerId: string,
-): string {
+function getDefaultModelIdForProvider(providers: RuntimeClineProviderCatalogItem[], providerId: string): string {
 	const normalizedProviderId = providerId.trim().toLowerCase();
 	if (!normalizedProviderId) {
 		return "";
@@ -156,7 +152,18 @@ export function useRuntimeSettingsClineController(
 			return true;
 		}
 		return apiKey.trim().length > 0;
-	}, [apiKey, baseUrl, config, initialBaseUrl, initialModelId, initialProviderId, initialReasoningEffort, modelId, providerId, reasoningEffort]);
+	}, [
+		apiKey,
+		baseUrl,
+		config,
+		initialBaseUrl,
+		initialModelId,
+		initialProviderId,
+		initialReasoningEffort,
+		modelId,
+		providerId,
+		reasoningEffort,
+	]);
 
 	useEffect(() => {
 		if (!open) {
@@ -216,9 +223,7 @@ export function useRuntimeSettingsClineController(
 			return;
 		}
 		const defaultProvider =
-			providerCatalog.find((provider) => provider.id.trim().toLowerCase() === "cline") ??
-			providerCatalog[0] ??
-			null;
+			providerCatalog.find((provider) => provider.id.trim().toLowerCase() === "cline") ?? providerCatalog[0] ?? null;
 		if (!defaultProvider) {
 			return;
 		}
@@ -280,87 +285,91 @@ export function useRuntimeSettingsClineController(
 		};
 	}, [open, providerId, selectedAgentId, workspaceId]);
 
-	const saveProviderSettingsDraft = useCallback(async (overrides?: SaveProviderSettingsOverrides): Promise<SaveResult> => {
-		const trimmedProviderId = (overrides?.providerId ?? providerId).trim();
-		if (!overrides && !hasUnsavedChanges && trimmedProviderId.length > 0) {
-			// Even when nothing is dirty, validate required fields for providers
-			// that need additional configuration (e.g. openai-compatible).
-			const normalizedEarlyProviderId = trimmedProviderId.toLowerCase();
-			if (normalizedEarlyProviderId === "openai-compatible") {
-				if (!baseUrl.trim()) {
-					return {
-						ok: false,
-						message:
-							"Base URL is required for the OpenAI Compatible provider. Enter the URL of your endpoint (e.g., http://localhost:8000/v1).",
-					};
+	const saveProviderSettingsDraft = useCallback(
+		async (overrides?: SaveProviderSettingsOverrides): Promise<SaveResult> => {
+			const trimmedProviderId = (overrides?.providerId ?? providerId).trim();
+			if (!overrides && !hasUnsavedChanges && trimmedProviderId.length > 0) {
+				// Even when nothing is dirty, validate required fields for providers
+				// that need additional configuration (e.g. openai-compatible).
+				const normalizedEarlyProviderId = trimmedProviderId.toLowerCase();
+				if (normalizedEarlyProviderId === "openai-compatible") {
+					if (!baseUrl.trim()) {
+						return {
+							ok: false,
+							message:
+								"Base URL is required for the OpenAI Compatible provider. Enter the URL of your endpoint (e.g., http://localhost:8000/v1).",
+						};
+					}
+					if (!modelId.trim()) {
+						return {
+							ok: false,
+							message:
+								"Model ID is required for the OpenAI Compatible provider. Enter the model name served by your endpoint.",
+						};
+					}
 				}
-				if (!modelId.trim()) {
-					return {
-						ok: false,
-						message:
-							"Model ID is required for the OpenAI Compatible provider. Enter the model name served by your endpoint.",
-					};
-				}
+				return { ok: true };
 			}
-			return { ok: true };
-		}
-		if (trimmedProviderId.length === 0) {
-			return {
-				ok: false,
-				message: "Choose a Cline provider before saving.",
-			};
-		}
-		const trimmedBaseUrl = toManagedClineOauthProvider(trimmedProviderId)
-			? null
-			: overrides && "baseUrl" in overrides
-				? overrides.baseUrl?.trim() || null
-				: baseUrl.trim() || null;
-		const trimmedModelId =
-			overrides && "modelId" in overrides ? overrides.modelId?.trim() || null : modelId.trim() || null;
-		const normalizedSaveProviderId = trimmedProviderId.toLowerCase();
-		if (normalizedSaveProviderId === "openai-compatible" && !trimmedBaseUrl) {
-			return {
-				ok: false,
-				message:
-					"Base URL is required for the OpenAI Compatible provider. Enter the URL of your endpoint (e.g., http://localhost:8000/v1).",
-			};
-		}
-		if (normalizedSaveProviderId === "openai-compatible" && !trimmedModelId) {
-			return {
-				ok: false,
-				message:
-					"Model ID is required for the OpenAI Compatible provider. Enter the model name served by your endpoint.",
-			};
-		}
-		const trimmedApiKey =
-			overrides && "apiKey" in overrides
-				? overrides.apiKey?.trim() || null
-				: managedOauthProvider
-					? null
-					: apiKey.trim() || null;
-		const nextReasoningEffort = overrides && "reasoningEffort" in overrides ? overrides.reasoningEffort ?? null : reasoningEffort || null;
-		try {
-			const savedSettings = await saveClineProviderSettings(workspaceId, {
-				providerId: trimmedProviderId,
-				modelId: trimmedModelId,
-				apiKey: trimmedApiKey,
-				baseUrl: trimmedBaseUrl,
-				reasoningEffort: nextReasoningEffort,
-			});
-			setProviderId(savedSettings.providerId ?? savedSettings.oauthProvider ?? trimmedProviderId);
-			setModelId(savedSettings.modelId ?? "");
-			setApiKey("");
-			setBaseUrl(savedSettings.baseUrl ?? "");
-			setReasoningEffort(savedSettings.reasoningEffort ?? "");
-			setProviderSettingsOverride(savedSettings);
-			return { ok: true };
-		} catch (error) {
-			return {
-				ok: false,
-				message: error instanceof Error ? error.message : String(error),
-			};
-		}
-	}, [apiKey, baseUrl, hasUnsavedChanges, managedOauthProvider, modelId, providerId, reasoningEffort, workspaceId]);
+			if (trimmedProviderId.length === 0) {
+				return {
+					ok: false,
+					message: "Choose a Cline provider before saving.",
+				};
+			}
+			const trimmedBaseUrl = toManagedClineOauthProvider(trimmedProviderId)
+				? null
+				: overrides && "baseUrl" in overrides
+					? overrides.baseUrl?.trim() || null
+					: baseUrl.trim() || null;
+			const trimmedModelId =
+				overrides && "modelId" in overrides ? overrides.modelId?.trim() || null : modelId.trim() || null;
+			const normalizedSaveProviderId = trimmedProviderId.toLowerCase();
+			if (normalizedSaveProviderId === "openai-compatible" && !trimmedBaseUrl) {
+				return {
+					ok: false,
+					message:
+						"Base URL is required for the OpenAI Compatible provider. Enter the URL of your endpoint (e.g., http://localhost:8000/v1).",
+				};
+			}
+			if (normalizedSaveProviderId === "openai-compatible" && !trimmedModelId) {
+				return {
+					ok: false,
+					message:
+						"Model ID is required for the OpenAI Compatible provider. Enter the model name served by your endpoint.",
+				};
+			}
+			const trimmedApiKey =
+				overrides && "apiKey" in overrides
+					? overrides.apiKey?.trim() || null
+					: managedOauthProvider
+						? null
+						: apiKey.trim() || null;
+			const nextReasoningEffort =
+				overrides && "reasoningEffort" in overrides ? (overrides.reasoningEffort ?? null) : reasoningEffort || null;
+			try {
+				const savedSettings = await saveClineProviderSettings(workspaceId, {
+					providerId: trimmedProviderId,
+					modelId: trimmedModelId,
+					apiKey: trimmedApiKey,
+					baseUrl: trimmedBaseUrl,
+					reasoningEffort: nextReasoningEffort,
+				});
+				setProviderId(savedSettings.providerId ?? savedSettings.oauthProvider ?? trimmedProviderId);
+				setModelId(savedSettings.modelId ?? "");
+				setApiKey("");
+				setBaseUrl(savedSettings.baseUrl ?? "");
+				setReasoningEffort(savedSettings.reasoningEffort ?? "");
+				setProviderSettingsOverride(savedSettings);
+				return { ok: true };
+			} catch (error) {
+				return {
+					ok: false,
+					message: error instanceof Error ? error.message : String(error),
+				};
+			}
+		},
+		[apiKey, baseUrl, hasUnsavedChanges, managedOauthProvider, modelId, providerId, reasoningEffort, workspaceId],
+	);
 
 	const runOauthLogin = useCallback(async (): Promise<SaveResult> => {
 		if (!managedOauthProvider) {

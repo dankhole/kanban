@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRuntimeSettingsClineController } from "@/hooks/use-runtime-settings-cline-controller";
-import type { RuntimeConfigResponse, RuntimeClineReasoningEffort } from "@/runtime/types";
+import type { RuntimeClineReasoningEffort, RuntimeConfigResponse } from "@/runtime/types";
 
 const fetchClineProviderCatalogMock = vi.hoisted(() => vi.fn());
 const fetchClineProviderModelsMock = vi.hoisted(() => vi.fn());
@@ -40,7 +40,9 @@ interface HookSnapshot {
 	runOauthLogin: () => Promise<{ ok: boolean; message?: string }>;
 }
 
-function createRuntimeConfigResponse(clineOverrides: Partial<RuntimeConfigResponse["clineProviderSettings"]> = {}): RuntimeConfigResponse {
+function createRuntimeConfigResponse(
+	clineOverrides: Partial<RuntimeConfigResponse["clineProviderSettings"]> = {},
+): RuntimeConfigResponse {
 	return {
 		selectedAgentId: "cline",
 		selectedShortcutLabel: null,
@@ -749,11 +751,14 @@ describe("useRuntimeSettingsClineController", () => {
 		});
 
 		expect(saveResult).toEqual({ ok: true });
-		expect(saveClineProviderSettingsMock).toHaveBeenCalledWith("workspace-1", expect.objectContaining({
-			providerId: "openai-compatible",
-			modelId: "llama-3.1-8b",
-			baseUrl: "http://localhost:8000/v1",
-		}));
+		expect(saveClineProviderSettingsMock).toHaveBeenCalledWith(
+			"workspace-1",
+			expect.objectContaining({
+				providerId: "openai-compatible",
+				modelId: "llama-3.1-8b",
+				baseUrl: "http://localhost:8000/v1",
+			}),
+		);
 	});
 
 	it("clears base url when saving an OAuth provider", async () => {
