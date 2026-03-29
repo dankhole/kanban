@@ -37,6 +37,7 @@ import { KanbanAccessBlockedFallback } from "@/hooks/kanban-access-blocked-fallb
 import { RuntimeDisconnectedFallback } from "@/hooks/runtime-disconnected-fallback";
 import { useAppHotkeys } from "@/hooks/use-app-hotkeys";
 import { useBoardInteractions } from "@/hooks/use-board-interactions";
+import { useScheduledTaskStarter } from "@/hooks/use-scheduled-task-starter";
 import { useDebugTools } from "@/hooks/use-debug-tools";
 import { useDocumentVisibility } from "@/hooks/use-document-visibility";
 import { useGitActions } from "@/hooks/use-git-actions";
@@ -287,6 +288,8 @@ export default function App(): ReactElement {
 		newTaskAutoReviewMode,
 		setNewTaskAutoReviewMode,
 		isNewTaskStartInPlanModeDisabled,
+		newTaskSchedule,
+		setNewTaskSchedule,
 		newTaskBranchRef,
 		setNewTaskBranchRef,
 		editingTaskId,
@@ -568,6 +571,7 @@ export default function App(): ReactElement {
 		handleCardSelect,
 		handleMoveToTrash,
 		handleMoveReviewCardToTrash,
+		handleForceTrashScheduledTask,
 		handleRestoreTaskFromTrash,
 		handleCancelAutomaticTaskAction,
 		handleOpenClearTrash,
@@ -611,6 +615,11 @@ export default function App(): ReactElement {
 		handleStartTask,
 		handleStartAllBacklogTasks,
 		setSelectedTaskId,
+	});
+
+	useScheduledTaskStarter({
+		board,
+		startBacklogTasks: handleStartAllBacklogTasks,
 	});
 
 	useAppHotkeys({
@@ -976,6 +985,7 @@ export default function App(): ReactElement {
 								agentOpenPrTaskLoadingById={agentOpenPrTaskLoadingById}
 								moveToTrashLoadingById={moveToTrashLoadingById}
 								onMoveReviewCardToTrash={handleMoveReviewCardToTrash}
+								onForceTrashScheduledTask={handleForceTrashScheduledTask}
 								onRestoreTaskFromTrash={handleRestoreTaskFromTrash}
 								onCancelAutomaticTaskAction={handleCancelAutomaticTaskAction}
 								onAddReviewComments={(taskId: string, text: string) => {
@@ -1059,6 +1069,8 @@ export default function App(): ReactElement {
 				onAutoReviewEnabledChange={setNewTaskAutoReviewEnabled}
 				autoReviewMode={newTaskAutoReviewMode}
 				onAutoReviewModeChange={setNewTaskAutoReviewMode}
+				schedule={newTaskSchedule}
+				onScheduleChange={setNewTaskSchedule}
 				workspaceId={currentProjectId}
 				branchRef={newTaskBranchRef}
 				branchOptions={createTaskBranchOptions}

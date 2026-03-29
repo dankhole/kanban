@@ -1,6 +1,6 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { buildTaskWorktreeDisplayPath } from "@runtime-task-worktree-path";
-import { AlertCircle, GitBranch, Play, RotateCcw, Timer, Trash2 } from "lucide-react";
+import { AlertCircle, GitBranch, Play, RotateCcw, Timer, Trash2, Undo2 } from "lucide-react";
 import type { MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -552,18 +552,31 @@ export function BoardCard({
 										}}
 									/>
 								) : columnId === "review" ? (
-									<Button
-										icon={isMoveToTrashLoading ? <Spinner size={13} /> : <Trash2 size={13} />}
-										variant="ghost"
-										size="sm"
-										disabled={isMoveToTrashLoading}
-										aria-label="Move task to trash"
-										onMouseDown={stopEvent}
-										onClick={(event) => {
-											stopEvent(event);
-											onMoveToTrash?.(card.id);
-										}}
-									/>
+									<Tooltip
+										side="bottom"
+										content={card.schedule?.enabled ? "Move to Backlog" : "Move to Trash"}
+									>
+										<Button
+											icon={
+												isMoveToTrashLoading ? (
+													<Spinner size={13} />
+												) : card.schedule?.enabled ? (
+													<Undo2 size={13} />
+												) : (
+													<Trash2 size={13} />
+												)
+											}
+											variant="ghost"
+											size="sm"
+											disabled={isMoveToTrashLoading}
+											aria-label={card.schedule?.enabled ? "Move task to backlog" : "Move task to trash"}
+											onMouseDown={stopEvent}
+											onClick={(event) => {
+												stopEvent(event);
+												onMoveToTrash?.(card.id);
+											}}
+										/>
+									</Tooltip>
 								) : columnId === "trash" ? (
 									<Tooltip
 										side="bottom"

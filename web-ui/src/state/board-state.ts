@@ -466,8 +466,8 @@ export function updateTask(board: BoardData, taskId: string, draft: TaskDraft): 
 				autoReviewMode: resolveTaskAutoReviewMode(draft.autoReviewMode ?? DEFAULT_TASK_AUTO_REVIEW_MODE),
 				images: draft.images === undefined ? card.images : draft.images.length > 0 ? draft.images.map((image) => ({ ...image })) : undefined,
 				baseRef,
-				schedule: draft.schedule,
 				updatedAt: Date.now(),
+				schedule: draft.schedule === undefined ? card.schedule : draft.schedule,
 			};
 		});
 		return columnUpdated ? { ...column, cards } : column;
@@ -550,4 +550,8 @@ export function findCardSelection(board: BoardData, taskId: string): CardSelecti
 
 export function getTaskColumnId(board: BoardData, taskId: string): BoardColumnId | null {
 	return runtimeTaskState.getTaskColumnId(board, taskId);
+}
+
+export function getScheduledTasksDue(board: BoardData, now: number = Date.now()): string[] {
+	return runtimeTaskState.getScheduledTasksDue(board, now);
 }

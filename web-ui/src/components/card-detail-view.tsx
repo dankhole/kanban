@@ -204,6 +204,7 @@ export function CardDetailView({
 	onAgentCommitTask,
 	onAgentOpenPrTask,
 	onMoveReviewCardToTrash,
+	onForceTrashScheduledTask,
 	onRestoreTaskFromTrash,
 	onCancelAutomaticTaskAction,
 	commitTaskLoadingById,
@@ -259,6 +260,7 @@ export function CardDetailView({
 	onAgentCommitTask?: (taskId: string) => void;
 	onAgentOpenPrTask?: (taskId: string) => void;
 	onMoveReviewCardToTrash?: (taskId: string) => void;
+	onForceTrashScheduledTask?: (taskId: string) => void;
 	onRestoreTaskFromTrash?: (taskId: string) => void;
 	onCancelAutomaticTaskAction?: (taskId: string) => void;
 	commitTaskLoadingById?: Record<string, boolean>;
@@ -402,6 +404,7 @@ export function CardDetailView({
 	const diffPanelPercent = `${((1 - agentPanelRatio) * 100).toFixed(1)}%`;
 	const fileTreePanelFlex = `0 0 ${isDiffExpanded ? EXPANDED_FILE_TREE_PANEL_BASIS : COLLAPSED_FILE_TREE_PANEL_BASIS}`;
 	const showMoveToTrashActions = selection.column.id === "review" || selection.column.id === "in_progress";
+	const isScheduledTask = selection.card.schedule?.enabled === true;
 	const isTaskTerminalEnabled = selection.column.id === "in_progress" || selection.column.id === "review";
 	const showClineAgentChatPanel = isNativeClineAgentSelected(sessionSummary?.agentId ?? selectedAgentId);
 	const availablePaths = useMemo(() => {
@@ -594,7 +597,9 @@ export function CardDetailView({
 											isOpenPrLoading={agentOpenPrTaskLoadingById?.[selection.card.id] ?? false}
 											showMoveToTrash={showMoveToTrashActions}
 											onMoveToTrash={onMoveToTrash}
+											onForceTrash={isScheduledTask && onForceTrashScheduledTask ? () => onForceTrashScheduledTask(selection.card.id) : undefined}
 											isMoveToTrashLoading={isMoveToTrashLoading}
+											isScheduledTask={isScheduledTask}
 											onCancelAutomaticAction={
 												selection.card.autoReviewEnabled === true && onCancelAutomaticTaskAction
 													? () => onCancelAutomaticTaskAction(selection.card.id)
@@ -621,7 +626,9 @@ export function CardDetailView({
 											autoFocus
 											showMoveToTrash={showMoveToTrashActions}
 											onMoveToTrash={onMoveToTrash}
+											onForceTrash={isScheduledTask && onForceTrashScheduledTask ? () => onForceTrashScheduledTask(selection.card.id) : undefined}
 											isMoveToTrashLoading={isMoveToTrashLoading}
+											isScheduledTask={isScheduledTask}
 											onCancelAutomaticAction={
 												selection.card.autoReviewEnabled === true && onCancelAutomaticTaskAction
 													? () => onCancelAutomaticTaskAction(selection.card.id)

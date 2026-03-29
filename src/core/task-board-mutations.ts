@@ -827,7 +827,7 @@ export function getScheduledTasksDue(board: RuntimeBoardData, now: number = Date
 	}
 	const dueTaskIds: string[] = [];
 	for (const card of backlogColumn.cards) {
-		if (card.schedule?.enabled && card.schedule.nextRunAt <= now) {
+		if (card.schedule?.enabled && card.schedule.runCount > 0 && card.schedule.nextRunAt <= now) {
 			dueTaskIds.push(card.id);
 		}
 	}

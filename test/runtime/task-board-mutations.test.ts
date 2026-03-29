@@ -499,7 +499,7 @@ describe("getScheduledTasksDue", () => {
 			type: "recurring" as const,
 			intervalMs: 3600000,
 			nextRunAt: now - 100, // In the past
-			runCount: 0,
+			runCount: 1, // Must have run at least once to be auto-started
 			enabled: true,
 		};
 		const created = addTaskToColumn(
