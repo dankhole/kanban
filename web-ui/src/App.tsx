@@ -6,6 +6,9 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { notifyError, showAppToast } from "@/components/app-toaster";
+import { BatchActionBar } from "@/components/batch-action-bar";
+import { BatchConfigDialog } from "@/components/batch-config-dialog";
+import { BatchProgressIndicator, type BatchTask, type BatchTaskStatus } from "@/components/batch-progress-indicator";
 import { CardDetailView } from "@/components/card-detail-view";
 import { ClearTrashDialog } from "@/components/clear-trash-dialog";
 import { DebugDialog } from "@/components/debug-dialog";
@@ -561,6 +564,7 @@ export default function App(): ReactElement {
 		handleStartTask,
 		handleStartAllBacklogTasks,
 		handleDetailTaskDragEnd,
+		confirmMoveTaskToTrash,
 		handleCardSelect,
 		handleMoveToTrash,
 		handleMoveReviewCardToTrash,
@@ -599,6 +603,82 @@ export default function App(): ReactElement {
 				}
 			: undefined,
 	});
+
+	// Multi-select batch state — plan items 6.2, 6.7
+	const isMetaKeyHeldRef = useRef(false);
+	const [batchSelectedTasks, setBatchSelectedTasks] = useState<Array<{ taskId: string; title: string }>>([]);
+	const [isBatchConfigOpen, setIsBatchConfigOpen] = useState(false);
+	const [dismissedBatchIds, setDismissedBatchIds] = useState<ReadonlySet<string>>(new Set());
+
+	useEffect(() => {
+		const onDown = (e: KeyboardEvent) => {
+			if (e.metaKey || e.ctrlKey) isMetaKeyHeldRef.current = true;
+		};
+		const onUp = (e: KeyboardEvent) => {
+			if (!e.metaKey && !e.ctrlKey) isMetaKeyHeldRef.current = false;
+		};
+		window.addEventListener("keydown", onDown);
+		window.addEventListener("keyup", onUp);
+		return () => {
+			window.removeEventListener("keydown", onDown);
+			window.removeEventListener("keyup", onUp);
+		};
+	}, []);
+
+	// Cmd/Ctrl+click on a backlog card toggles it into the batch selection.
+	// Any plain click clears the batch and falls through to normal card selection.
+	const handleBatchCardSelect = useCallback(
+		(taskId: string) => {
+			if (isMetaKeyHeldRef.current) {
+				const backlogCards = board.columns.find((c) => c.id === "backlog")?.cards ?? [];
+				const card = backlogCards.find((c) => c.id === taskId);
+				if (card) {
+					const cardTitle = card.prompt.split("\n")[0]?.slice(0, 80) ?? card.prompt.slice(0, 80);
+					setBatchSelectedTasks((prev) => {
+						const exists = prev.some((t) => t.taskId === taskId);
+						return exists ? prev.filter((t) => t.taskId !== taskId) : [...prev, { taskId, title: cardTitle }];
+					});
+					return;
+				}
+			}
+			setBatchSelectedTasks([]);
+			handleCardSelect(taskId);
+		},
+		[board.columns, handleCardSelect],
+	);
+
+	const handleBatchTrashAll = useCallback(async () => {
+		const allCards = board.columns.flatMap((c) => c.cards);
+		for (const { taskId } of batchSelectedTasks) {
+			const card = allCards.find((c) => c.id === taskId);
+			if (card) await confirmMoveTaskToTrash(card);
+		}
+		setBatchSelectedTasks([]);
+	}, [batchSelectedTasks, board.columns, confirmMoveTaskToTrash]);
+
+	/** Map an active batch's taskIds to BatchTask[] by looking up board state. */
+	const buildBatchTasks = useCallback(
+		(taskIds: string[]): BatchTask[] => {
+			const colForTask = new Map<string, string>();
+			for (const col of board.columns) {
+				for (const card of col.cards) {
+					colForTask.set(card.id, col.id);
+				}
+			}
+			const colToStatus = (colId: string | undefined): BatchTaskStatus => {
+				if (colId === "in_progress") return "running";
+				if (colId === "review" || colId === "trash") return "completed";
+				return "queued";
+			};
+			return taskIds.map((tid) => {
+				const colId = colForTask.get(tid);
+				const rawPrompt = board.columns.flatMap((c) => c.cards).find((c) => c.id === tid)?.prompt ?? "";
+				const title = rawPrompt ? (rawPrompt.split("\n")[0]?.slice(0, 80) ?? rawPrompt.slice(0, 80)) : tid;
+				return { taskId: tid, title, status: colToStatus(colId) };
+			});
+		},
+		[board.columns],
+	);
 
 	const {
 		handleCreateAndStartTask,
@@ -880,7 +960,7 @@ export default function App(): ReactElement {
 											data={board}
 											taskSessions={sessions}
 											workspacePath={workspacePath}
-											onCardSelect={handleCardSelect}
+											onCardSelect={handleBatchCardSelect}
 											onCreateTask={handleOpenCreateTask}
 											onStartTask={handleStartTaskFromBoard}
 											onStartAllTasks={handleStartAllBacklogTasksFromBoard}
@@ -1068,6 +1148,60 @@ export default function App(): ReactElement {
 				branchOptions={createTaskBranchOptions}
 				onBranchRefChange={setNewTaskBranchRef}
 			/>
+			{/* Batch multi-select action bar — plan 6.2 */}
+			{batchSelectedTasks.length > 0 && !isBatchConfigOpen ? (
+				<BatchActionBar
+					selectedTasks={batchSelectedTasks}
+					onClear={() => setBatchSelectedTasks([])}
+					onRunBatch={() => setIsBatchConfigOpen(true)}
+					onTrashAll={handleBatchTrashAll}
+				/>
+			) : null}
+			{/* Batch config dialog — plan 6.2 */}
+			{isBatchConfigOpen && currentProjectId ? (
+				<BatchConfigDialog
+					tasks={batchSelectedTasks}
+					projectPath={workspacePath ?? currentProjectId}
+					onStart={async ({ taskIds, concurrency, projectPath }) => {
+						await getRuntimeTrpcClient(currentProjectId).jobs.createBatch.mutate({
+							taskIds,
+							concurrency,
+							projectPath,
+						});
+						setBatchSelectedTasks([]);
+					}}
+					onClose={() => setIsBatchConfigOpen(false)}
+				/>
+			) : null}
+			{/* Batch progress indicators — plan 6.7 */}
+			{(jobQueueStatus?.activeBatches ?? [])
+				.filter((b) => !dismissedBatchIds.has(b.batchId))
+				.map((b) => (
+					<BatchProgressIndicator
+						key={b.batchId}
+						batchId={b.batchId}
+						queue={b.queue}
+						tasks={buildBatchTasks(b.taskIds)}
+						onPauseBatch={async () => {
+							if (currentProjectId) {
+								await getRuntimeTrpcClient(currentProjectId).jobs.pauseQueue.mutate({
+									queue: b.queue,
+									reason: "user paused batch",
+								});
+							}
+						}}
+						onCancelRemaining={async () => {
+							if (currentProjectId) {
+								await getRuntimeTrpcClient(currentProjectId).jobs.pauseQueue.mutate({
+									queue: b.queue,
+									reason: "user cancelled batch",
+								});
+							}
+							setDismissedBatchIds((prev) => new Set([...prev, b.batchId]));
+						}}
+						onDismiss={() => setDismissedBatchIds((prev) => new Set([...prev, b.batchId]))}
+					/>
+				))}
 			<ClearTrashDialog
 				open={isClearTrashDialogOpen}
 				taskCount={trashTaskCount}
