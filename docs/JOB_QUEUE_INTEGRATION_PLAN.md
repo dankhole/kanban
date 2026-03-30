@@ -605,7 +605,7 @@ kanban task start "$TASK_ID" --workspace "$WORKSPACE" --base-ref "$BASE_REF"
 - [x] 1.5 — `scripts/maintenance/schedule-task-guard.sh` checks task column before starting
 - [x] 1.6 — `web-ui/src/components/schedule-task-dialog.tsx`: date-picker + 5 quick presets (30m/1h/2h/tonight/tomorrow); callback pattern
 - [x] 1.7 — `web-ui/src/components/schedule-badge.tsx`: countdown clock badge; amber when overdue; 60s update interval
-- [ ] 1.8 — Add "Schedule" option to backlog card context menu
+- [x] 1.8 — Add "Schedule" option to backlog card context menu
 - [ ] 1.9 — Wire schedule cancellation into card trash flow
 - [ ] 1.10 — End-to-end test: schedule a task for 10s in the future, verify it starts
 
@@ -740,7 +740,7 @@ The settings are stored in Kanban's runtime config and used when seeding jobs on
 - [x] 2.4 — Implemented `worktree-cleanup.sh` (removes trash worktrees older than 24h; self-reschedules)
 - [x] 2.5 — `seedMaintenanceJobs` implemented in `src/server/maintenance-jobs.ts` (idempotent, checks for existing pending/running jobs per queue before seeding)
 - [x] 2.6 — Called from `runtime-server.ts` after sidecar `startSidecar()` resolves
-- [ ] 2.7 — Add maintenance job config to runtime config schema
+- [x] 2.7 — Add maintenance job config to runtime config schema
 - [ ] 2.8 — Create `MaintenanceSettings` component in settings UI
 - [ ] 2.9 — Test: verify maintenance jobs self-reschedule correctly across 3 iterations
 
@@ -1211,7 +1211,7 @@ Shows at the top of the board when a batch is active:
 - [ ] 6.2 — Add multi-select interaction to backlog cards (shift-click, cmd-click)
 - [x] 6.3 — `web-ui/src/components/batch-action-bar.tsx`: floating bottom bar; Run Batch + Trash All + clear; renders when ≥2 selected
 - [x] 6.4 — `web-ui/src/components/batch-config-dialog.tsx`: drag-to-reorder priority list, concurrency slider (1-4), calls onStart callback
-- [ ] 6.5 — Create `BatchProgressIndicator` component
+- [x] 6.5 — Create `BatchProgressIndicator` component
 - [ ] 6.6 — Add batch metadata tracking (batchId → taskIds mapping in runtime state)
 - [ ] 6.7 — Add "Pause Batch" and "Cancel Remaining" controls
 - [ ] 6.8 — Test: select 4 backlog tasks, run batch with concurrency 2, verify 2 run at a time
