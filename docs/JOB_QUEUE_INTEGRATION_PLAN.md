@@ -825,9 +825,10 @@ In the board view, when a card has dependencies and `autoStartWhenReady` is true
 
 ### Progress
 
-- [ ] 3.1 — Add `kanban task list-ready` CLI command
-- [ ] 3.2 — Create `dependency-auto-start.sh` watcher script
-- [ ] 3.3 — Add `autoStartWhenReady` field to board card schema
+- [x] 3.1 — `kanban task list-ready` CLI command: queries workspace state, finds backlog cards with `autoStartWhenReady=true` and all deps in trash
+- [x] 3.2 — `scripts/maintenance/dependency-auto-start.sh`: polls `list-ready`, starts up to CONCURRENCY_LIMIT tasks, self-reschedules
+- [x] 3.3 — `autoStartWhenReady: z.boolean().optional()` added to `runtimeBoardCardSchema` in `api-contract.ts`
+- [x] 1.5 — `scripts/maintenance/schedule-task-guard.sh`: checks task is still in backlog before starting (prevents double-start on scheduled tasks)
 - [ ] 3.4 — Add auto-start toggle to backlog card dependency UI
 - [ ] 3.5 — Seed dependency watcher job during sidecar startup (when any workspace has auto-start tasks)
 - [ ] 3.6 — Add pipeline arrow visualization between dependent cards

@@ -103,6 +103,8 @@ export const runtimeBoardCardSchema = z.object({
 	scheduledJobId: z.string().nullable().optional(),
 	/** Unix-ms timestamp when the job is due to fire. */
 	scheduledDueAt: z.number().nullable().optional(),
+	/** If true, this backlog task will be auto-started by the dependency watcher when all its dependencies are satisfied. */
+	autoStartWhenReady: z.boolean().optional(),
 });
 export type RuntimeBoardCard = z.infer<typeof runtimeBoardCardSchema>;
 

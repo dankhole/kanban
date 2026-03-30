@@ -537,6 +537,54 @@ async function getTaskQueueStatus(input: { cwd: string; projectPath?: string }):
 	};
 }
 
+async function listReadyTasks(input: { cwd: string; projectPath?: string }): Promise<JsonRecord> {
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd, {
+		autoCreateIfMissing: false,
+	});
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const runtimeState = await runtimeClient.workspace.getState.query();
+	const { board } = runtimeState;
+
+	// Build a set of task IDs that are in the trash column (completed/done)
+	const trashColumn = board.columns.find((col) => col.id === "trash");
+	const trashedTaskIds = new Set((trashColumn?.cards ?? []).map((c) => c.id));
+
+	// Build a map from taskId → array of toTaskIds (things this task depends on)
+	const dependsOnMap = new Map<string, string[]>();
+	for (const dep of board.dependencies) {
+		const existing = dependsOnMap.get(dep.fromTaskId) ?? [];
+		existing.push(dep.toTaskId);
+		dependsOnMap.set(dep.fromTaskId, existing);
+	}
+
+	// Find backlog cards with autoStartWhenReady=true whose dependencies are all trashed
+	const backlogColumn = board.columns.find((col) => col.id === "backlog");
+	const readyTasks = (backlogColumn?.cards ?? [])
+		.filter((card) => {
+			if (!card.autoStartWhenReady) {
+				return false;
+			}
+			const deps = dependsOnMap.get(card.id) ?? [];
+			// No dependencies = always ready (no blocking tasks)
+			// All dependencies must be in trash to be ready
+			return deps.every((depId) => trashedTaskIds.has(depId));
+		})
+		.map((card) => ({
+			id: card.id,
+			prompt: card.prompt,
+			baseRef: card.baseRef,
+			dependencyCount: (dependsOnMap.get(card.id) ?? []).length,
+		}));
+
+	return {
+		ok: true,
+		workspacePath: workspaceRepoPath,
+		tasks: readyTasks,
+		count: readyTasks.length,
+	};
+}
+
 async function startTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -1149,6 +1197,22 @@ export function registerTaskCommand(program: Command): void {
 			await runTaskCommand(
 				async () =>
 					await getTaskQueueStatus({
+						cwd: process.cwd(),
+						projectPath: options.projectPath,
+					}),
+			);
+		});
+
+	task
+		.command("list-ready")
+		.description(
+			"List backlog tasks with autoStartWhenReady=true whose dependencies have all been satisfied (moved to trash).",
+		)
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await listReadyTasks({
 						cwd: process.cwd(),
 						projectPath: options.projectPath,
 					}),
