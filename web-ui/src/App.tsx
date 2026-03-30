@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { notifyError, showAppToast } from "@/components/app-toaster";
+import { AutomationsPanel } from "@/components/automations/automations-panel";
 import { BatchActionBar } from "@/components/batch-action-bar";
 import { BatchConfigDialog } from "@/components/batch-config-dialog";
 import { BatchProgressIndicator, type BatchTask, type BatchTaskStatus } from "@/components/batch-progress-indicator";
@@ -91,6 +92,7 @@ export default function App(): ReactElement {
 	const [isClearTrashDialogOpen, setIsClearTrashDialogOpen] = useState(false);
 	const [isGitHistoryOpen, setIsGitHistoryOpen] = useState(false);
 	const [isJobsDashboardOpen, setIsJobsDashboardOpen] = useState(false);
+	const [isAutomationsPanelOpen, setIsAutomationsPanelOpen] = useState(false);
 	const [pendingTaskStartAfterEditId, setPendingTaskStartAfterEditId] = useState<string | null>(null);
 	const taskEditorResetRef = useRef<() => void>(() => {});
 	const lastStreamErrorRef = useRef<string | null>(null);
@@ -126,6 +128,7 @@ export default function App(): ReactElement {
 		pendingGitInitializationPath,
 		isInitializingGitProject,
 		jobQueueStatus,
+		automationStatus,
 		resetProjectNavigationState,
 	} = useProjectNavigation({
 		onProjectSwitchStart: handleProjectSwitchStart,
@@ -555,6 +558,9 @@ export default function App(): ReactElement {
 	const handleToggleJobsDashboard = useCallback(() => {
 		setIsJobsDashboardOpen((current) => !current);
 	}, []);
+	const handleToggleAutomationsPanel = useCallback(() => {
+		setIsAutomationsPanelOpen((current) => !current);
+	}, []);
 
 	const {
 		handleProgrammaticCardMoveReady,
@@ -908,6 +914,8 @@ export default function App(): ReactElement {
 					isGitHistoryOpen={isGitHistoryOpen}
 					onToggleJobsDashboard={handleToggleJobsDashboard}
 					isJobsDashboardOpen={isJobsDashboardOpen}
+					onToggleAutomationsPanel={handleToggleAutomationsPanel}
+					isAutomationsPanelOpen={isAutomationsPanelOpen}
 					hideProjectDependentActions={shouldHideProjectDependentTopBarActions}
 				/>
 				<div className="relative flex flex-1 min-h-0 min-w-0 overflow-hidden">
@@ -941,7 +949,9 @@ export default function App(): ReactElement {
 						) : (
 							<div className="flex flex-1 flex-col min-h-0 min-w-0">
 								<div className="flex flex-1 min-h-0 min-w-0">
-									{isJobsDashboardOpen ? (
+									{isAutomationsPanelOpen ? (
+										<AutomationsPanel automationStatus={automationStatus} workspaceId={currentProjectId} />
+									) : isJobsDashboardOpen ? (
 										<JobsDashboard jobQueueStatus={jobQueueStatus} workspaceId={currentProjectId} />
 									) : isGitHistoryOpen ? (
 										<GitHistoryView

@@ -66,6 +66,7 @@ export interface UseProjectNavigationResult {
 	latestMcpAuthStatuses: ReturnType<typeof useRuntimeStateStream>["latestMcpAuthStatuses"];
 	clineSessionContextVersion: ReturnType<typeof useRuntimeStateStream>["clineSessionContextVersion"];
 	jobQueueStatus: ReturnType<typeof useRuntimeStateStream>["jobQueueStatus"];
+	automationStatus: ReturnType<typeof useRuntimeStateStream>["automationStatus"];
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -102,6 +103,7 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
 		jobQueueStatus,
+		automationStatus,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,
@@ -322,6 +324,7 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
 		jobQueueStatus,
+		automationStatus,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,

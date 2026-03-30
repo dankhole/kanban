@@ -24,6 +24,14 @@ export interface JobQueueStatus {
 	activeBatches: Array<{ batchId: string; queue: string; taskIds: string[] }>;
 }
 
+/** Live automation agent summary delivered via the automation_updated stream message. */
+export interface AutomationStatus {
+	enabledInstancesCount: number;
+	openFindingsCount: number;
+	/** Instance IDs that were disabled by a tripwire since the last broadcast. */
+	recentlyDisabledInstanceIds: string[];
+}
+
 const STREAM_RECONNECT_BASE_DELAY_MS = 500;
 const STREAM_RECONNECT_MAX_DELAY_MS = 5_000;
 
@@ -64,6 +72,7 @@ export interface UseRuntimeStateStreamResult {
 	latestMcpAuthStatuses: RuntimeClineMcpServerAuthStatus[] | null;
 	clineSessionContextVersion: number;
 	jobQueueStatus: JobQueueStatus | null;
+	automationStatus: AutomationStatus | null;
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -80,6 +89,7 @@ interface RuntimeStateStreamStore {
 	latestMcpAuthStatuses: RuntimeClineMcpServerAuthStatus[] | null;
 	clineSessionContextVersion: number;
 	jobQueueStatus: JobQueueStatus | null;
+	automationStatus: AutomationStatus | null;
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -103,6 +113,7 @@ type RuntimeStateStreamAction =
 	| { type: "workspace_state_updated"; workspaceState: RuntimeWorkspaceStateResponse }
 	| { type: "task_sessions_updated"; summaries: RuntimeTaskSessionSummary[] }
 	| { type: "job_queue_status_updated"; status: JobQueueStatus }
+	| { type: "automation_updated"; status: AutomationStatus }
 	| { type: "stream_error"; message: string }
 	| { type: "stream_disconnected"; message: string };
 
@@ -118,6 +129,7 @@ function createInitialRuntimeStateStreamStore(requestedWorkspaceId: string | nul
 		latestMcpAuthStatuses: null,
 		clineSessionContextVersion: 0,
 		jobQueueStatus: null,
+		automationStatus: null,
 		streamError: null,
 		isRuntimeDisconnected: false,
 		hasReceivedSnapshot: false,
@@ -203,6 +215,7 @@ function runtimeStateStreamReducer(
 			latestMcpAuthStatuses: state.latestMcpAuthStatuses,
 			clineSessionContextVersion: action.payload.clineSessionContextVersion,
 			jobQueueStatus: state.jobQueueStatus,
+			automationStatus: state.automationStatus,
 			streamError: null,
 			isRuntimeDisconnected: false,
 			hasReceivedSnapshot: true,
@@ -294,6 +307,12 @@ function runtimeStateStreamReducer(
 		return {
 			...state,
 			jobQueueStatus: action.status,
+		};
+	}
+	if (action.type === "automation_updated") {
+		return {
+			...state,
+			automationStatus: action.status,
 		};
 	}
 	if (action.type === "stream_error") {
@@ -491,6 +510,18 @@ export function useRuntimeStateStream(requestedWorkspaceId: string | null): UseR
 						});
 						return;
 					}
+					if (payload.type === "automation_updated") {
+						const p = payload as unknown as AutomationStatus & { type: string };
+						dispatch({
+							type: "automation_updated",
+							status: {
+								enabledInstancesCount: p.enabledInstancesCount ?? 0,
+								openFindingsCount: p.openFindingsCount ?? 0,
+								recentlyDisabledInstanceIds: p.recentlyDisabledInstanceIds ?? [],
+							},
+						});
+						return;
+					}
 					if (payload.type === "error") {
 						dispatch({
 							type: "stream_error",
@@ -544,6 +575,7 @@ export function useRuntimeStateStream(requestedWorkspaceId: string | null): UseR
 		latestMcpAuthStatuses: state.latestMcpAuthStatuses,
 		clineSessionContextVersion: state.clineSessionContextVersion,
 		jobQueueStatus: state.jobQueueStatus,
+		automationStatus: state.automationStatus,
 		streamError: state.streamError,
 		isRuntimeDisconnected: state.isRuntimeDisconnected,
 		hasReceivedSnapshot: state.hasReceivedSnapshot,

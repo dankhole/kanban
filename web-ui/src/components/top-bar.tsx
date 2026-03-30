@@ -4,6 +4,7 @@ import {
 	ArrowDown,
 	ArrowLeft,
 	ArrowUp,
+	Bot,
 	Bug,
 	Check,
 	ChevronDown,
@@ -295,6 +296,8 @@ export function TopBar({
 	isGitHistoryOpen,
 	onToggleJobsDashboard,
 	isJobsDashboardOpen,
+	onToggleAutomationsPanel,
+	isAutomationsPanelOpen,
 	onOpenSettings,
 	showDebugButton,
 	onOpenDebugDialog,
@@ -331,6 +334,8 @@ export function TopBar({
 	isGitHistoryOpen?: boolean;
 	onToggleJobsDashboard?: () => void;
 	isJobsDashboardOpen?: boolean;
+	onToggleAutomationsPanel?: () => void;
+	isAutomationsPanelOpen?: boolean;
 	onOpenSettings?: (section?: SettingsSection) => void;
 	showDebugButton?: boolean;
 	onOpenDebugDialog?: () => void;
@@ -614,6 +619,17 @@ export function TopBar({
 							aria-label={isJobsDashboardOpen ? "Close job queue" : "Open job queue"}
 							data-testid="toggle-jobs-dashboard-button"
 							className={cn("ml-0.5 mr-0.5", isJobsDashboardOpen ? "ring-1 ring-accent" : "")}
+						/>
+					) : null}
+					{onToggleAutomationsPanel ? (
+						<Button
+							variant={isAutomationsPanelOpen ? "primary" : "ghost"}
+							size="sm"
+							icon={<Bot size={16} />}
+							onClick={onToggleAutomationsPanel}
+							aria-label={isAutomationsPanelOpen ? "Close automation agents" : "Open automation agents"}
+							data-testid="toggle-automations-panel-button"
+							className={cn("ml-0.5 mr-0.5", isAutomationsPanelOpen ? "ring-1 ring-accent" : "")}
 						/>
 					) : null}
 					<Button
