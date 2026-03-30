@@ -19,7 +19,10 @@ const cleanupOwnerLockPath = resolve(tmpdir(), "kanban-dogfood-cleanup-owner.loc
 
 function printHelp() {
 	console.log(
-		"Usage: npm run dogfood -- [--project <path>] [--port <number|auto>] [--no-open] [--skip-build]",
+		"Usage: npm run dogfood -- [--project <path>] [--host <ip>] [--port <number|auto>] [--no-open] [--skip-build] [-- ...flags]",
+	);
+	console.log(
+		"\nAny unrecognized flags are forwarded to the Kanban CLI (e.g. --skip-shutdown-cleanup, --debug).",
 	);
 }
 
@@ -155,8 +158,11 @@ async function releaseCleanupOwnership(ownerToken) {
 function parseArgs(argv) {
 	let project = "";
 	let port = "auto";
+	let host = "0.0.0.0";
 	let noOpen = false;
 	let skipBuild = false;
+	/** @type {string[]} Unrecognized flags forwarded to the Kanban CLI */
+	const passthrough = [];
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
@@ -190,6 +196,19 @@ function parseArgs(argv) {
 			port = arg.slice("--port=".length);
 			continue;
 		}
+		if (arg === "--host") {
+			const value = argv[index + 1];
+			if (!value) {
+				throw new Error("Missing value for --host.");
+			}
+			host = value;
+			index += 1;
+			continue;
+		}
+		if (arg.startsWith("--host=")) {
+			host = arg.slice("--host=".length);
+			continue;
+		}
 		if (arg === "--no-open") {
 			noOpen = true;
 			continue;
@@ -198,14 +217,17 @@ function parseArgs(argv) {
 			skipBuild = true;
 			continue;
 		}
-		throw new Error(`Unknown option: ${arg}`);
+		// Collect unrecognized flags to forward to the Kanban CLI
+		passthrough.push(arg);
 	}
 
 	return {
 		project: project.trim() ? resolve(project.trim()) : null,
 		port: port.trim() || "auto",
+		host: host.trim() || "0.0.0.0",
 		noOpen,
 		skipBuild,
+		passthrough,
 	};
 }
 
@@ -366,7 +388,7 @@ async function main() {
 		}
 
 		const cliEntrypoint = resolve(repoRoot, "dist/cli.js");
-		const launchArgs = ["--port", args.port, "--host", "0.0.0.0"];
+		const launchArgs = ["--port", args.port, "--host", args.host];
 		if (skipShutdownCleanup) {
 			launchArgs.push("--skip-shutdown-cleanup");
 		}
@@ -384,7 +406,7 @@ async function main() {
 		}
 		console.log(`[dogfood] Runtime port: ${args.port}`);
 
-		return await runRuntimeCommand(nodeBinary, [cliEntrypoint, ...launchArgs], {
+		return await runRuntimeCommand(nodeBinary, [cliEntrypoint, ...launchArgs, ...args.passthrough], {
 			cwd: launchCwd,
 			env: buildDogfoodRuntimeEnv(process.env),
 		});
