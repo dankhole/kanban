@@ -480,6 +480,63 @@ async function unlinkTasks(input: { cwd: string; dependencyId: string; projectPa
 	};
 }
 
+async function scheduleTask(input: {
+	cwd: string;
+	taskId: string;
+	projectPath?: string;
+	dueIn?: string;
+	dueAt?: number;
+}): Promise<JsonRecord> {
+	if (!input.dueIn && !input.dueAt) {
+		throw new Error("task schedule requires either --due-in or --due-at.");
+	}
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const runtimeState = await runtimeClient.workspace.getState.query();
+	const fromColumnId = getTaskColumnId(runtimeState.board, input.taskId);
+	if (!fromColumnId) {
+		throw new Error(`Task "${input.taskId}" was not found in workspace ${workspaceRepoPath}.`);
+	}
+	if (fromColumnId !== "backlog") {
+		throw new Error(`Task "${input.taskId}" is in "${fromColumnId}"; only backlog tasks can be scheduled.`);
+	}
+
+	// Build the command that will be executed by the job queue when the job
+	// fires — kanban task start --task-id <id> --project-path <repoPath>
+	const kanbanBin = process.argv[1] ?? "kanban";
+	const scheduled = await runtimeClient.jobs.schedule.mutate({
+		command: process.execPath,
+		args: [kanbanBin, "task", "start", "--task-id", input.taskId, "--project-path", workspaceRepoPath],
+		dueIn: input.dueIn,
+		dueAt: input.dueAt,
+		queue: "scheduled-tasks",
+		maxAttempts: 1,
+	});
+	return {
+		ok: true,
+		jobId: scheduled.jobId,
+		taskId: input.taskId,
+		dueIn: input.dueIn ?? null,
+		dueAt: input.dueAt ?? null,
+		workspacePath: workspaceRepoPath,
+	};
+}
+
+async function getTaskQueueStatus(input: { cwd: string; projectPath?: string }): Promise<JsonRecord> {
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd, {
+		autoCreateIfMissing: false,
+	});
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const status = await runtimeClient.jobs.getStatus.query();
+	return {
+		ok: true,
+		workspacePath: workspaceRepoPath,
+		...status,
+	};
+}
+
 async function startTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -1059,6 +1116,40 @@ export function registerTaskCommand(program: Command): void {
 					await startTask({
 						cwd: process.cwd(),
 						taskId: options.taskId,
+						projectPath: options.projectPath,
+					}),
+			);
+		});
+
+	task
+		.command("schedule")
+		.description("Schedule a backlog task to start at a future time via the job queue.")
+		.requiredOption("--task-id <id>", "Task ID to schedule.")
+		.option("--due-in <delay>", "Relative delay until start (e.g. 10s, 5m, 2h, 1d).")
+		.option("--due-at <timestamp>", "Absolute UNIX timestamp (seconds) when to start.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; dueIn?: string; dueAt?: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await scheduleTask({
+						cwd: process.cwd(),
+						taskId: options.taskId,
+						dueIn: options.dueIn,
+						dueAt: options.dueAt !== undefined ? Number(options.dueAt) : undefined,
+						projectPath: options.projectPath,
+					}),
+			);
+		});
+
+	task
+		.command("queue-status")
+		.description("Show job queue health and status for the current workspace.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await getTaskQueueStatus({
+						cwd: process.cwd(),
 						projectPath: options.projectPath,
 					}),
 			);
