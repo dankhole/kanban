@@ -157,6 +157,10 @@ export const runtimeBoardCardSchema = z.object({
 	workflowPolicy: runtimeWorkflowPolicySchema.nullable().optional(),
 	/** Live workflow runtime state.  null on normal task cards. */
 	workflowState: runtimeWorkflowStateSchema.nullable().optional(),
+	/** ID of the automation agent instance that created this card.  null on user-created cards. */
+	createdByAutomation: z.string().nullable().optional(),
+	/** Fingerprint of the automation finding that triggered this card's creation. */
+	automationFindingFingerprint: z.string().nullable().optional(),
 });
 export type RuntimeBoardCard = z.infer<typeof runtimeBoardCardSchema>;
 
@@ -457,6 +461,19 @@ export const runtimeStateStreamJobQueueStatusMessageSchema = z.object({
 });
 export type RuntimeStateStreamJobQueueStatusMessage = z.infer<typeof runtimeStateStreamJobQueueStatusMessageSchema>;
 
+export const runtimeStateStreamAutomationUpdatedMessageSchema = z.object({
+	type: z.literal("automation_updated"),
+	/** Number of enabled automation instances. */
+	enabledInstancesCount: z.number().int().nonnegative(),
+	/** Total open findings across all instances. */
+	openFindingsCount: z.number().int().nonnegative(),
+	/** Instance IDs of instances whose tripwire has fired (enabled = false after tripwire). */
+	recentlyDisabledInstanceIds: z.array(z.string()),
+});
+export type RuntimeStateStreamAutomationUpdatedMessage = z.infer<
+	typeof runtimeStateStreamAutomationUpdatedMessageSchema
+>;
+
 export const runtimeStateStreamMessageSchema = z.discriminatedUnion("type", [
 	runtimeStateStreamSnapshotMessageSchema,
 	runtimeStateStreamWorkspaceStateMessageSchema,
@@ -469,6 +486,7 @@ export const runtimeStateStreamMessageSchema = z.discriminatedUnion("type", [
 	runtimeStateStreamMcpAuthUpdatedMessageSchema,
 	runtimeStateStreamClineSessionContextUpdatedMessageSchema,
 	runtimeStateStreamJobQueueStatusMessageSchema,
+	runtimeStateStreamAutomationUpdatedMessageSchema,
 	runtimeStateStreamErrorMessageSchema,
 ]);
 export type RuntimeStateStreamMessage = z.infer<typeof runtimeStateStreamMessageSchema>;

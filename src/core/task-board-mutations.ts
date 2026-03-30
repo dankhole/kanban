@@ -18,6 +18,10 @@ export interface RuntimeCreateTaskInput {
 	autoReviewMode?: RuntimeTaskAutoReviewMode;
 	images?: RuntimeTaskImage[];
 	baseRef: string;
+	/** ID of the automation agent instance creating this card.  null on user-created cards. */
+	createdByAutomation?: string | null;
+	/** Fingerprint of the automation finding that triggered this card's creation. */
+	automationFindingFingerprint?: string | null;
 }
 
 export interface RuntimeUpdateTaskInput {
@@ -293,6 +297,10 @@ export function addTaskToColumn(
 		baseRef,
 		createdAt: now,
 		updatedAt: now,
+		...(input.createdByAutomation != null && { createdByAutomation: input.createdByAutomation }),
+		...(input.automationFindingFingerprint != null && {
+			automationFindingFingerprint: input.automationFindingFingerprint,
+		}),
 	};
 
 	const targetColumnIndex = board.columns.findIndex((column) => column.id === columnId);

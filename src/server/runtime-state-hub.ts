@@ -63,6 +63,11 @@ export interface RuntimeStateHub {
 		health: Record<string, unknown> | null,
 		activeBatches?: Array<{ batchId: string; queue: string; taskIds: string[] }>,
 	) => void;
+	broadcastAutomationUpdated: (payload: {
+		enabledInstancesCount: number;
+		openFindingsCount: number;
+		recentlyDisabledInstanceIds: string[];
+	}) => void;
 	close: () => Promise<void>;
 }
 
@@ -363,6 +368,23 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 	};
 
+	const broadcastAutomationUpdated = (automationPayload: {
+		enabledInstancesCount: number;
+		openFindingsCount: number;
+		recentlyDisabledInstanceIds: string[];
+	}) => {
+		if (runtimeStateClients.size === 0) {
+			return;
+		}
+		const payload = {
+			type: "automation_updated" as const,
+			...automationPayload,
+		};
+		for (const client of runtimeStateClients) {
+			sendRuntimeStateMessage(client, payload);
+		}
+	};
+
 	runtimeStateWebSocketServer.on("connection", async (client: WebSocket, context: unknown) => {
 		client.on("close", () => {
 			cleanupRuntimeStateClient(client);
@@ -578,6 +600,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		bumpClineSessionContextVersion,
 		broadcastTaskReadyForReview,
 		broadcastJobQueueStatus,
+		broadcastAutomationUpdated,
 		close: async () => {
 			for (const timer of taskSessionBroadcastTimersByWorkspaceId.values()) {
 				clearTimeout(timer);

@@ -49,11 +49,23 @@ export interface AutomationServiceDeps {
 		prompt: string,
 		options?: { autoStart?: boolean; automationInstanceId?: string; findingFingerprint?: string },
 	): Promise<{ taskId: string }>;
+	/**
+	 * Optional callback to broadcast the latest automation state to connected
+	 * browser clients after a scan or instance mutation.
+	 */
+	broadcastUpdated?: (payload: {
+		enabledInstancesCount: number;
+		openFindingsCount: number;
+		recentlyDisabledInstanceIds: string[];
+	}) => void;
 }
 
 // ---------------------------------------------------------------------------
 // AutomationService
 // ---------------------------------------------------------------------------
+
+const AUDIT_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1_000; // 24 hours
+const AUDIT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000; // 30 days
 
 export class AutomationService {
 	private readonly deps: AutomationServiceDeps;
@@ -61,6 +73,8 @@ export class AutomationService {
 	private readonly scanTimers = new Map<string, NodeJS.Timeout>();
 	/** Guard against concurrent scans for the same instance. */
 	private readonly runningScanIds = new Set<string>();
+	/** Daily timer that purges stale audit events and scan runs. */
+	private auditPurgeTimer: NodeJS.Timeout | null = null;
 
 	constructor(deps: AutomationServiceDeps) {
 		this.deps = deps;
@@ -80,12 +94,30 @@ export class AutomationService {
 		}
 		const activeCount = instances.filter((i) => i.enabled).length;
 		process.stderr.write(`[automation-service] started — ${activeCount} active instance(s)\n`);
+
+		// Schedule daily audit event purge (runs first after 1 min, then every 24h).
+		const runPurge = () => {
+			automationStore.purgeAuditEvents(Date.now() - AUDIT_RETENTION_MS).catch((err: unknown) => {
+				const msg = err instanceof Error ? err.message : String(err);
+				process.stderr.write(`[automation-service] audit purge failed: ${msg}\n`);
+			});
+		};
+		const initialDelay = setTimeout(() => {
+			runPurge();
+			this.auditPurgeTimer = setInterval(runPurge, AUDIT_PURGE_INTERVAL_MS);
+		}, 60_000); // first run after 1 minute to let boot settle
+		this.auditPurgeTimer = initialDelay;
 	}
 
 	stop(): void {
 		for (const [instanceId, timer] of this.scanTimers) {
 			clearInterval(timer);
 			this.scanTimers.delete(instanceId);
+		}
+		if (this.auditPurgeTimer) {
+			clearTimeout(this.auditPurgeTimer);
+			clearInterval(this.auditPurgeTimer);
+			this.auditPurgeTimer = null;
 		}
 	}
 
@@ -352,6 +384,7 @@ export class AutomationService {
 								projectPath,
 							});
 							await this.disableInstance(instance.id);
+							await this.broadcastState([instance.id]);
 							process.stderr.write(
 								`[automation-service] HALT: instance ${instance.id} disabled — ${decision.reason}\n`,
 							);
@@ -473,6 +506,7 @@ export class AutomationService {
 				tasksCreated: String(tasksCreated),
 				tasksAutoStarted: String(tasksAutoStarted),
 			});
+			await this.broadcastState();
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
 			process.stderr.write(`[automation-service] scan failed for ${instance.id}: ${msg}\n`);
@@ -532,6 +566,20 @@ export class AutomationService {
 	private async ensureDataDirExists(): Promise<void> {
 		const dir = join(homedir(), ".kanban", "automations");
 		await mkdir(dir, { recursive: true });
+	}
+
+	/** Build and emit the automation_updated broadcast to all connected UI clients. */
+	async broadcastState(recentlyDisabledInstanceIds: string[] = []): Promise<void> {
+		if (!this.deps.broadcastUpdated) {
+			return;
+		}
+		const instances = await automationStore.listInstances();
+		const findings = await automationStore.listFindings({ status: "open" });
+		this.deps.broadcastUpdated({
+			enabledInstancesCount: instances.filter((i) => i.enabled).length,
+			openFindingsCount: findings.length,
+			recentlyDisabledInstanceIds,
+		});
 	}
 }
 

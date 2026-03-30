@@ -252,8 +252,16 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 				if (!baseRef) {
 					throw new Error(`Could not determine base ref for workspace at ${workspacePath}`);
 				}
-				const added = addTaskToColumn(state.board, "backlog", { prompt, baseRef }, () =>
-					globalThis.crypto.randomUUID(),
+				const added = addTaskToColumn(
+					state.board,
+					"backlog",
+					{
+						prompt,
+						baseRef,
+						createdByAutomation: options?.automationInstanceId ?? null,
+						automationFindingFingerprint: options?.findingFingerprint ?? null,
+					},
+					() => globalThis.crypto.randomUUID(),
 				);
 				return { board: added.board, value: added.task };
 			});
@@ -296,6 +304,9 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 			}
 
 			return { taskId };
+		},
+		broadcastUpdated: (payload) => {
+			deps.runtimeStateHub.broadcastAutomationUpdated(payload);
 		},
 	});
 
