@@ -34,7 +34,7 @@ export function isDirectoryPickerUnavailableErrorMessage(message: string | null 
 	return DIRECTORY_PICKER_UNAVAILABLE_MARKERS.some((marker) => normalized.includes(marker));
 }
 
-function promptForManualProjectPath(): string | null {
+function _promptForManualProjectPath(): string | null {
 	if (typeof window === "undefined") {
 		return null;
 	}
@@ -76,6 +76,10 @@ export interface UseProjectNavigationResult {
 	handleCancelInitializeGitProject: () => void;
 	handleRemoveProject: (projectId: string) => Promise<boolean>;
 	resetProjectNavigationState: () => void;
+	// Folder picker dialog state — used when the native OS picker is unavailable.
+	isFolderPickerOpen: boolean;
+	handleFolderPickerSelect: (path: string) => Promise<void>;
+	handleFolderPickerCancel: () => void;
 }
 
 export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigationInput): UseProjectNavigationResult {
@@ -89,6 +93,7 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 	const [removingProjectId, setRemovingProjectId] = useState<string | null>(null);
 	const [pendingGitInitializationPath, setPendingGitInitializationPath] = useState<string | null>(null);
 	const [isInitializingGitProject, setIsInitializingGitProject] = useState(false);
+	const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
 
 	const {
 		currentProjectId,
@@ -142,35 +147,31 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 	);
 
 	const handleAddProject = useCallback(async () => {
+		// Try the native OS picker first; fall back to the in-browser folder picker.
 		try {
 			const trpcClient = getRuntimeTrpcClient(currentProjectId);
 			const picked = await trpcClient.projects.pickDirectory.mutate();
 
-			let projectPath: string | null = null;
 			if (picked.ok && picked.path) {
-				projectPath = picked.path;
-			} else if (!picked.ok && picked.error === "No directory was selected.") {
-				return;
-			} else if (!picked.ok && isDirectoryPickerUnavailableErrorMessage(picked.error)) {
-				showAppToast({
-					intent: "warning",
-					icon: "warning-sign",
-					message: "Directory picker unavailable on this runtime. Enter the project path manually.",
-					timeout: 5000,
-				});
-				projectPath = promptForManualProjectPath();
-				if (!projectPath) {
-					return;
-				}
-			} else {
-				throw new Error(picked.error ?? "Could not pick project directory.");
-			}
-			if (!projectPath) {
+				await addProjectByPath(picked.path);
 				return;
 			}
-			await addProjectByPath(projectPath);
+			if (!picked.ok && picked.error === "No directory was selected.") {
+				return;
+			}
+			// Native picker unavailable — open the in-browser folder picker.
+			if (!picked.ok && isDirectoryPickerUnavailableErrorMessage(picked.error)) {
+				setIsFolderPickerOpen(true);
+				return;
+			}
+			throw new Error(picked.error ?? "Could not pick project directory.");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			// If the error looks like the native picker is just unavailable, open the UI picker.
+			if (isDirectoryPickerUnavailableErrorMessage(message)) {
+				setIsFolderPickerOpen(true);
+				return;
+			}
 			showAppToast({
 				intent: "danger",
 				icon: "warning-sign",
@@ -179,6 +180,18 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 			});
 		}
 	}, [addProjectByPath, currentProjectId]);
+
+	const handleFolderPickerSelect = useCallback(
+		async (path: string) => {
+			setIsFolderPickerOpen(false);
+			await addProjectByPath(path);
+		},
+		[addProjectByPath],
+	);
+
+	const handleFolderPickerCancel = useCallback(() => {
+		setIsFolderPickerOpen(false);
+	}, []);
 
 	const handleConfirmInitializeGitProject = useCallback(async () => {
 		if (!pendingGitInitializationPath || isInitializingGitProject) {
@@ -330,5 +343,8 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		handleCancelInitializeGitProject,
 		handleRemoveProject,
 		resetProjectNavigationState,
+		isFolderPickerOpen,
+		handleFolderPickerSelect,
+		handleFolderPickerCancel,
 	};
 }

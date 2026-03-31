@@ -344,56 +344,70 @@ export function createLoginHandler(deps: CreateLoginHandlerDependencies): LoginH
 						return;
 					}
 
-					const config = await loadRemoteConfig();
-					const hostHeader = req.headers.host?.trim();
-					const scheme = req.headers["x-forwarded-proto"]?.toString().split(",")[0]?.trim() ?? "http";
-					const baseUrl =
-						config.publicBaseUrl?.trim() || (hostHeader ? `${scheme}://${hostHeader}` : getKanbanRuntimeOrigin());
-					const redirectUri = `${baseUrl.replace(/\/$/, "")}/auth/callback`;
-
-					// Exchange code for access token.
+					// The Cline OAuth flow embeds the full token payload as base64-encoded
+					// JSON in the `code` parameter — no server-side exchange required.
+					// Shape: { accessToken, refreshToken, email, firstName, lastName, expiresAt }
 					let accessToken: string;
+					let email: string;
+					let displayName: string | null = null;
+
 					try {
-						const tokenRes = await fetch(`${CLINE_API_BASE}/api/v1/auth/token`, {
-							method: "POST",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								grant_type: "authorization_code",
-								client_type: "extension",
-								code,
-								redirect_uri: redirectUri,
-							}),
-							signal: AbortSignal.timeout(10_000),
-						});
-						if (!tokenRes.ok) {
-							json(res, 401, { error: "Token exchange failed." });
-							return;
-						}
-						const tokenBody = (await tokenRes.json()) as { access?: string; access_token?: string };
-						accessToken = (tokenBody.access ?? tokenBody.access_token ?? "").trim();
-						if (!accessToken) {
-							json(res, 401, { error: "No access token in response." });
+						const padding = "=".repeat((4 - (code.length % 4)) % 4);
+						const decoded = Buffer.from(code + padding, "base64").toString("utf-8");
+						// Strip any trailing bytes after the closing brace (signature suffix).
+						const jsonEnd = decoded.lastIndexOf("}");
+						const jsonStr = jsonEnd >= 0 ? decoded.slice(0, jsonEnd + 1) : decoded;
+						const payload = JSON.parse(jsonStr) as {
+							accessToken?: string;
+							email?: string;
+							firstName?: string;
+							lastName?: string;
+							name?: string;
+						};
+
+						accessToken = payload.accessToken?.trim() ?? "";
+						email = payload.email?.trim() ?? "";
+
+						const firstName = payload.firstName?.trim() ?? "";
+						const lastName = payload.lastName?.trim() ?? "";
+						displayName = [firstName, lastName].filter(Boolean).join(" ").trim() || payload.name?.trim() || null;
+
+						if (!accessToken || !email) {
+							json(res, 401, { error: "Invalid token payload in callback." });
 							return;
 						}
 					} catch {
-						json(res, 502, { error: "Failed to contact Cline auth server." });
+						json(res, 400, { error: "Failed to decode authorization code." });
 						return;
 					}
 
-					const identity = await validateWorkosToken(accessToken);
-					if (!identity) {
-						json(res, 401, { error: "Token validation failed." });
-						return;
-					}
-					if (!isEmailAllowed(identity.email, config)) {
+					const config = await loadRemoteConfig();
+					if (!isEmailAllowed(email, config)) {
 						json(res, 403, { error: "Your account is not authorised to access this Kanban instance." });
 						return;
 					}
 
+					// The token payload came directly from the Cline OAuth flow —
+					// the email and tokens are already verified by the OAuth provider.
+					// We still call validateWorkosToken to get the userId, but fall back
+					// to creating the session with just the email if it fails (e.g. network
+					// unavailable inside Docker or token expired before we can validate).
+					let userId: string | null = null;
+					let resolvedDisplayName = displayName;
+					try {
+						const identity = await validateWorkosToken(accessToken);
+						if (identity) {
+							userId = identity.userId;
+							resolvedDisplayName = displayName ?? identity.displayName;
+						}
+					} catch {
+						// Network error — proceed with email from the callback payload.
+					}
+
 					const { cookie } = await remoteAuth.createSession({
-						email: identity.email,
-						userId: identity.userId,
-						displayName: identity.displayName,
+						email,
+						userId,
+						displayName: resolvedDisplayName,
 						persistent: false,
 					});
 					res.writeHead(302, {

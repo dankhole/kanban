@@ -316,7 +316,9 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 	}
 
 	function cookieHeader(token: string, maxAgeSeconds: number): string {
-		return `${SESSION_COOKIE_NAME}=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
+		// SameSite=Lax (not Strict) so the cookie is sent on WebSocket upgrades
+		// and same-site navigations from the OAuth callback redirect.
+		return `${SESSION_COOKIE_NAME}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
 	}
 
 	function extractTokenFromCookie(cookieHeader: string): string | null {
@@ -570,7 +572,7 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 		},
 
 		clearCookie(): string {
-			return `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0`;
+			return `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`;
 		},
 
 		pushManager,

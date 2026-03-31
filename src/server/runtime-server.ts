@@ -509,9 +509,10 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 
 		// Auth gate for WebSocket upgrades — same logic as HTTP requests.
 		if (!isLocalRequest(request)) {
+			// Mark as handled IMMEDIATELY so the catch-all upgrade handler below
+			// does not destroy the socket while the async auth check is in flight.
+			(request as IncomingMessage & { __kanbanUpgradeHandled?: boolean }).__kanbanUpgradeHandled = true;
 			const cookieHeader = request.headers.cookie ?? "";
-			// validateSession is async; we must await before proceeding.
-			// Use a void-returning IIFE to keep the synchronous upgrade handler signature.
 			void (async () => {
 				const session = await remoteAuth.validateSession(cookieHeader);
 				if (!session) {

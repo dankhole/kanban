@@ -10,6 +10,7 @@ import { CardDetailView } from "@/components/card-detail-view";
 import { ClearTrashDialog } from "@/components/clear-trash-dialog";
 import { DebugDialog } from "@/components/debug-dialog";
 import { AgentTerminalPanel } from "@/components/detail-panels/agent-terminal-panel";
+import { FolderPickerDialog } from "@/components/folder-picker-dialog";
 import { GitHistoryView } from "@/components/git-history-view";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ProjectNavigationPanel } from "@/components/project-navigation-panel";
@@ -121,6 +122,9 @@ export default function App(): ReactElement {
 		pendingGitInitializationPath,
 		isInitializingGitProject,
 		resetProjectNavigationState,
+		isFolderPickerOpen,
+		handleFolderPickerSelect,
+		handleFolderPickerCancel,
 	} = useProjectNavigation({
 		onProjectSwitchStart: handleProjectSwitchStart,
 	});
@@ -1057,6 +1061,12 @@ export default function App(): ReactElement {
 				taskCount={trashTaskCount}
 				onCancel={() => setIsClearTrashDialogOpen(false)}
 				onConfirm={handleConfirmClearTrash}
+			/>
+			<FolderPickerDialog
+				open={isFolderPickerOpen}
+				currentProjectId={currentProjectId}
+				onSelect={(path) => void handleFolderPickerSelect(path)}
+				onCancel={handleFolderPickerCancel}
 			/>
 			<StartupOnboardingDialog
 				open={isStartupOnboardingDialogOpen}
