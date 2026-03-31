@@ -72,6 +72,7 @@ body,
 		overflow-x: auto;
 		overflow-y: hidden;
 		scroll-snap-type: x mandatory;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.kb-board > section {
