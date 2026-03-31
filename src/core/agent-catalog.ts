@@ -7,6 +7,8 @@ export interface RuntimeAgentCatalogEntry {
 	baseArgs: string[];
 	autonomousArgs: string[];
 	installUrl: string;
+	capabilities: readonly string[];
+	supportsTeams: boolean;
 }
 
 export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
@@ -17,6 +19,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: ["--dangerously-skip-permissions"],
 		installUrl: "https://docs.anthropic.com/en/docs/claude-code/quickstart",
+		capabilities: ["coding", "review", "planning", "reasoning", "debugging"],
+		supportsTeams: false,
 	},
 	{
 		id: "codex",
@@ -25,6 +29,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: ["--dangerously-bypass-approvals-and-sandbox"],
 		installUrl: "https://github.com/openai/codex",
+		capabilities: ["coding", "testing", "debugging"],
+		supportsTeams: false,
 	},
 	{
 		id: "cline",
@@ -33,6 +39,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: ["--auto-approve-all"],
 		installUrl: "https://github.com/cline/cline",
+		capabilities: ["coding", "review", "planning", "debugging", "testing"],
+		supportsTeams: true,
 	},
 	{
 		id: "opencode",
@@ -41,6 +49,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: [],
 		installUrl: "https://github.com/sst/opencode",
+		capabilities: ["coding"],
+		supportsTeams: false,
 	},
 	{
 		id: "droid",
@@ -49,6 +59,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: ["--auto", "high"],
 		installUrl: "https://docs.factory.ai/cli/getting-started/quickstart",
+		capabilities: ["coding", "automation"],
+		supportsTeams: false,
 	},
 	{
 		id: "gemini",
@@ -57,6 +69,8 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		baseArgs: [],
 		autonomousArgs: ["--yolo"],
 		installUrl: "https://github.com/google-gemini/gemini-cli",
+		capabilities: ["coding", "review", "reasoning"],
+		supportsTeams: false,
 	},
 ];
 
