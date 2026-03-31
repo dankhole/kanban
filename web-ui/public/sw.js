@@ -148,3 +148,29 @@ self.addEventListener("fetch", (event) => {
 
 	// Everything else (API calls, etc.): network only, no caching.
 });
+
+// --- Push notifications ---
+
+self.addEventListener("push", (event) => {
+	let payload = {};
+	try {
+		payload = event.data ? event.data.json() : {};
+	} catch {
+		// If data isn't valid JSON, fall through to defaults.
+	}
+
+	const title = payload.title || "Kanban";
+	const options = {
+		body: payload.body || "Something happened",
+		icon: "/assets/icon-192.png",
+		badge: "/assets/icon-192.png",
+		data: { url: payload.url || "/" },
+	};
+
+	event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+	event.notification.close();
+	event.waitUntil(clients.openWindow(event.notification.data.url));
+});
