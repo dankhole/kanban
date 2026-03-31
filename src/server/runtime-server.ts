@@ -126,7 +126,7 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 					if (userId && email) {
 						const displayName = body.displayName?.trim() || email.split("@")[0] || email;
 						const userRecord = remoteAuth.getOrCreateUserRecord(email, displayName);
-						localCaller = { uuid: userRecord.uuid, email, displayName, isLocal: true };
+						localCaller = { uuid: userRecord.uuid, email, displayName, isLocal: true, role: "admin" as const };
 						resolved = true;
 					}
 				}
@@ -140,7 +140,13 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 					const fallbackEmail = `${accountId}@cline`;
 					const displayName = accountId;
 					const userRecord = remoteAuth.getOrCreateUserRecord(fallbackEmail, displayName);
-					localCaller = { uuid: userRecord.uuid, email: fallbackEmail, displayName, isLocal: true };
+					localCaller = {
+						uuid: userRecord.uuid,
+						email: fallbackEmail,
+						displayName,
+						isLocal: true,
+						role: "admin" as const,
+					};
 				}
 			}
 		}
@@ -329,6 +335,7 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 					email: session.email,
 					displayName: session.displayName,
 					isLocal: false,
+					role: session.role,
 				};
 			}
 		}

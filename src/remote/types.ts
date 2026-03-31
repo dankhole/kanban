@@ -17,6 +17,11 @@ export interface RemoteConfig {
 	publicBaseUrl: string;
 }
 
+// Permission level for a remote user.
+// Localhost users are always treated as "admin" regardless of stored role.
+// New remote users default to "viewer" until an admin promotes them.
+export type RemoteUserRole = "viewer" | "editor" | "admin";
+
 // The resolved identity of whoever is making a tRPC request.
 // Present for both localhost (from stored WorkOS token) and remote (from session cookie).
 // Null when no identity can be resolved (e.g. localhost with no Cline account logged in).
@@ -28,6 +33,9 @@ export interface CallerIdentity {
 	displayName: string;
 	// True if the request came from 127.0.0.1 / ::1.
 	isLocal: boolean;
+	// Permission level. Localhost callers are always "admin".
+	// Remote users default to "viewer" until promoted by an admin.
+	role: RemoteUserRole;
 }
 
 // A host-created local account that logs in with email + password.

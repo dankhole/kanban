@@ -31,6 +31,7 @@ import { loadSqliteDb } from "@clinebot/shared/db";
 import { jwtVerify, SignJWT } from "jose";
 
 import { getRemoteDbPath } from "../remote/config-store";
+import type { RemoteUserRole } from "../remote/types";
 import { createPushManager, type PushManager } from "./push-manager";
 
 const scryptAsync = promisify(scrypt);
@@ -58,6 +59,8 @@ export interface RemoteSession {
 	issuedAt: number;
 	expiresAt: number;
 	persistent: boolean;
+	// Current permission level — fetched live from remote_users on every validation.
+	role: import("../remote/types").RemoteUserRole;
 }
 
 export interface RemoteUserRecord {
@@ -65,6 +68,8 @@ export interface RemoteUserRecord {
 	email: string;
 	displayName: string | null;
 	createdAt: number;
+	// Permission level. Defaults to "viewer" for new remote users.
+	role: RemoteUserRole;
 }
 
 export interface RemoteAuth {
@@ -90,6 +95,14 @@ export interface RemoteAuth {
 	listSessions(): RemoteSessionRecord[];
 	// Looks up or creates a user record, returning the stable UUID.
 	getOrCreateUserRecord(email: string, displayName: string | null): RemoteUserRecord;
+	// Returns the user record for a given UUID, or null.
+	getUserRecord(uuid: string): RemoteUserRecord | null;
+	// Returns all known user records.
+	listUsers(): RemoteUserRecord[];
+	// Sets the role for a user. Localhost callers are unaffected (always admin).
+	setUserRole(uuid: string, role: RemoteUserRole): void;
+	// Blocks a user: sets role to "viewer" AND revokes all their sessions.
+	blockUser(uuid: string): void;
 	// Hashes a plaintext password. Returns "salt:hash" hex string.
 	hashPassword(password: string): Promise<string>;
 	// Verifies a plaintext password against a stored hash.
@@ -171,8 +184,13 @@ function initSchema(db: Awaited<ReturnType<typeof loadSqliteDb>>): void {
 			uuid         TEXT    PRIMARY KEY,
 			email        TEXT    NOT NULL UNIQUE,
 			display_name TEXT,
-			created_at   INTEGER NOT NULL
+			created_at   INTEGER NOT NULL,
+			role         TEXT    NOT NULL DEFAULT 'viewer'
 		);
+		-- Add role column to existing installs that pre-date this field.
+		-- SQLite ignores "duplicate column" errors when using ALTER TABLE IF NOT EXISTS,
+		-- but the IF NOT EXISTS form for columns was added in SQLite 3.37.
+		-- We use a safe try-block pattern instead: just catch the error at runtime.
 		CREATE INDEX IF NOT EXISTS idx_remote_users_email ON remote_users (email);
 
 		CREATE TABLE IF NOT EXISTS remote_sessions (
@@ -209,6 +227,13 @@ function displayNameFromEmail(email: string): string {
 export async function createRemoteAuth(): Promise<RemoteAuth> {
 	const db = await loadSqliteDb(getRemoteDbPath());
 	initSchema(db);
+
+	// Migration: add role column to existing remote_users tables.
+	try {
+		db.exec("ALTER TABLE remote_users ADD COLUMN role TEXT NOT NULL DEFAULT 'viewer'");
+	} catch {
+		// Column already exists — safe to ignore.
+	}
 
 	const machineKey = deriveMachineKey();
 
@@ -266,37 +291,40 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 
 	// ── User record helpers ──────────────────────────────────────────────
 
+	type UserRow = { uuid: string; email: string; display_name: string | null; created_at: number; role: string };
+
+	function rowToUserRecord(row: UserRow): RemoteUserRecord {
+		return {
+			uuid: row.uuid,
+			email: row.email,
+			displayName: row.display_name,
+			createdAt: row.created_at,
+			role: (row.role === "admin" || row.role === "editor" ? row.role : "viewer") as RemoteUserRole,
+		};
+	}
+
 	function upsertUserRecord(email: string, displayName: string | null): RemoteUserRecord {
 		const existing = db
-			.prepare("SELECT uuid, email, display_name, created_at FROM remote_users WHERE email = ?")
-			.get(email) as unknown as
-			| { uuid: string; email: string; display_name: string | null; created_at: number }
-			| undefined;
+			.prepare("SELECT uuid, email, display_name, created_at, role FROM remote_users WHERE email = ?")
+			.get(email) as unknown as UserRow | undefined;
 
 		if (existing) {
 			// Update display_name if we now have a better one.
 			if (displayName && displayName !== existing.display_name) {
 				db.prepare("UPDATE remote_users SET display_name = ? WHERE uuid = ?").run(displayName, existing.uuid);
+				existing.display_name = displayName;
 			}
-			return {
-				uuid: existing.uuid,
-				email: existing.email,
-				displayName: displayName ?? existing.display_name,
-				createdAt: existing.created_at,
-			};
+			return rowToUserRecord(existing);
 		}
 
 		const uuid = randomBytes(16)
 			.toString("hex")
 			.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5");
 		const resolvedName = displayName ?? displayNameFromEmail(email);
-		db.prepare("INSERT INTO remote_users (uuid, email, display_name, created_at) VALUES (?, ?, ?, ?)").run(
-			uuid,
-			email,
-			resolvedName,
-			Date.now(),
-		);
-		return { uuid, email, displayName: resolvedName, createdAt: Date.now() };
+		db.prepare(
+			"INSERT INTO remote_users (uuid, email, display_name, created_at, role) VALUES (?, ?, ?, ?, 'viewer')",
+		).run(uuid, email, resolvedName, Date.now());
+		return { uuid, email, displayName: resolvedName, createdAt: Date.now(), role: "viewer" };
 	}
 
 	return {
@@ -304,6 +332,35 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 
 		getOrCreateUserRecord(email: string, displayName: string | null): RemoteUserRecord {
 			return upsertUserRecord(email, displayName);
+		},
+
+		getUserRecord(uuid: string): RemoteUserRecord | null {
+			const row = db
+				.prepare("SELECT uuid, email, display_name, created_at, role FROM remote_users WHERE uuid = ?")
+				.get(uuid) as unknown as UserRow | undefined;
+			return row ? rowToUserRecord(row) : null;
+		},
+
+		listUsers(): RemoteUserRecord[] {
+			const rows = db
+				.prepare("SELECT uuid, email, display_name, created_at, role FROM remote_users ORDER BY created_at DESC")
+				.all() as unknown as UserRow[];
+			return rows.map(rowToUserRecord);
+		},
+
+		setUserRole(uuid: string, role: RemoteUserRole): void {
+			db.prepare("UPDATE remote_users SET role = ? WHERE uuid = ?").run(role, uuid);
+		},
+
+		blockUser(uuid: string): void {
+			db.prepare("UPDATE remote_users SET role = 'viewer' WHERE uuid = ?").run(uuid);
+			// Revoke all active sessions so the change takes effect immediately.
+			const sessions = db.prepare("SELECT id FROM remote_sessions WHERE user_uuid = ?").all(uuid) as unknown as {
+				id: string;
+			}[];
+			for (const s of sessions) {
+				db.prepare("DELETE FROM remote_sessions WHERE id = ?").run(s.id);
+			}
 		},
 
 		async createSession({ email, userId, displayName, persistent }) {
@@ -366,6 +423,12 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 				return null;
 			}
 
+			// Look up the user's current role — it may have been updated since session creation.
+			const userRow = db.prepare("SELECT role FROM remote_users WHERE uuid = ?").get(row.userUuid) as unknown as
+				| { role: string }
+				| undefined;
+			const role: RemoteUserRole = userRow?.role === "admin" || userRow?.role === "editor" ? userRow.role : "viewer";
+
 			return {
 				sessionId: row.id,
 				email: row.email,
@@ -375,6 +438,7 @@ export async function createRemoteAuth(): Promise<RemoteAuth> {
 				issuedAt: row.issuedAt,
 				expiresAt: row.expiresAt,
 				persistent: Number(row.persistent) === 1,
+				role,
 			};
 		},
 

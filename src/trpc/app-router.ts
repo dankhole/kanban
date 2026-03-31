@@ -9,7 +9,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { loadRemoteConfig, saveRemoteConfig } from "../remote/config-store";
-import type { CallerIdentity, RemoteConfig } from "../remote/types";
+import type { CallerIdentity, RemoteConfig, RemoteUserRole } from "../remote/types";
 import { callerCanSetVisibility, filterBoardForCaller } from "../server/board-visibility";
 import type { PushManager } from "../server/push-manager";
 import type { RemoteAuth } from "../server/remote-auth";
@@ -202,6 +202,12 @@ import {
 	runtimePushUpdatePreferencesRequestSchema,
 	runtimePushUpdatePreferencesResponseSchema,
 	runtimePushVapidPublicKeyResponseSchema,
+	runtimeRemoteDevicesListResponseSchema,
+	runtimeRemoteDevicesRevokeRequestSchema,
+	runtimeRemoteOkResponseSchema,
+	runtimeRemoteUsersBlockRequestSchema,
+	runtimeRemoteUsersListResponseSchema,
+	runtimeRemoteUsersSetRoleRequestSchema,
 	runtimeShellSessionStartRequestSchema,
 	runtimeShellSessionStartResponseSchema,
 	runtimeSlashCommandsResponseSchema,
@@ -226,6 +232,9 @@ import {
 	runtimeTeamChatGetMessagesResponseSchema,
 	runtimeTeamChatSendRequestSchema,
 	runtimeTeamChatSendResponseSchema,
+	runtimeTunnelStartResponseSchema,
+	runtimeTunnelStatusResponseSchema,
+	runtimeTunnelStopResponseSchema,
 	runtimeWorkspaceChangesRequestSchema,
 	runtimeWorkspaceChangesResponseSchema,
 	runtimeWorkspaceFileSearchRequestSchema,
@@ -238,6 +247,7 @@ import {
 	runtimeWorktreeEnsureRequestSchema,
 	runtimeWorktreeEnsureResponseSchema,
 } from "../core/api-contract";
+import { getTunnelUrl, startCloudflaredTunnel, stopCloudflaredTunnel } from "../server/cloudflare-tunnel";
 
 export interface RuntimeTrpcWorkspaceScope {
 	workspaceId: string;
@@ -458,6 +468,27 @@ const localOnlyMiddleware = t.middleware(({ ctx, next }) => {
 
 const localOnlyProcedure = t.procedure.use(localOnlyMiddleware);
 
+// Blocks "viewer" role callers from performing write operations.
+// Admins (localhost) and editors can pass through.
+// Read-only procedures (queries) should NOT use this — viewers can still read.
+const editorOrAdminMiddleware = t.middleware(({ ctx, next }) => {
+	// Localhost is always admin.
+	if (isLocalRequest(ctx.req)) return next({ ctx });
+	// No identity = cannot mutate.
+	if (!ctx.caller) {
+		throw new TRPCError({ code: "UNAUTHORIZED", message: "You must be signed in." });
+	}
+	if (ctx.caller.role === "viewer") {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "Viewers cannot perform this action. Ask an admin to grant you editor access.",
+		});
+	}
+	return next({ ctx });
+});
+
+const _editorProcedure = t.procedure.use(editorOrAdminMiddleware);
+
 const workspaceProcedure = t.procedure.use(({ ctx, next }) => {
 	if (!ctx.requestedWorkspaceId) {
 		throw new TRPCError({
@@ -478,6 +509,23 @@ const workspaceProcedure = t.procedure.use(({ ctx, next }) => {
 		} satisfies RuntimeTrpcContextWithWorkspaceScope,
 	});
 });
+
+// Use assertEditorOrAdmin(ctx) at the start of any workspace mutation that viewers must not perform.
+function assertEditorOrAdmin(ctx: { caller: CallerIdentity | null; req: IncomingMessage }): void {
+	if (isLocalRequest(ctx.req)) return;
+	if (!ctx.caller) {
+		throw new TRPCError({ code: "UNAUTHORIZED", message: "You must be signed in." });
+	}
+	if (ctx.caller.role === "viewer") {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "Viewers cannot perform this action. Ask an admin to grant you editor access.",
+		});
+	}
+}
+
+// Alias — for procedures that don't need workspace scope (e.g. remote.push.subscribe).
+const writerWorkspaceProcedure = workspaceProcedure;
 
 const optionalTaskWorkspaceInfoRequestSchema = runtimeTaskWorkspaceInfoRequestSchema.nullable().optional();
 const gitSyncActionInputSchema = z.object({
@@ -507,22 +555,25 @@ export const runtimeAppRouter = t.router({
 			.mutation(async ({ ctx, input }) => {
 				return await ctx.runtimeApi.addClineProvider(ctx.workspaceScope, input);
 			}),
-		startTaskSession: workspaceProcedure
+		startTaskSession: writerWorkspaceProcedure
 			.input(runtimeTaskSessionStartRequestSchema)
 			.output(runtimeTaskSessionStartResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.startTaskSession(ctx.workspaceScope, input, ctx.caller);
 			}),
-		stopTaskSession: workspaceProcedure
+		stopTaskSession: writerWorkspaceProcedure
 			.input(runtimeTaskSessionStopRequestSchema)
 			.output(runtimeTaskSessionStopResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.stopTaskSession(ctx.workspaceScope, input);
 			}),
-		sendTaskSessionInput: workspaceProcedure
+		sendTaskSessionInput: writerWorkspaceProcedure
 			.input(runtimeTaskSessionInputRequestSchema)
 			.output(runtimeTaskSessionInputResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.sendTaskSessionInput(ctx.workspaceScope, input);
 			}),
 		getTaskChatMessages: workspaceProcedure
@@ -534,28 +585,32 @@ export const runtimeAppRouter = t.router({
 		getClineSlashCommands: t.procedure.output(runtimeSlashCommandsResponseSchema).query(async ({ ctx }) => {
 			return await ctx.runtimeApi.getClineSlashCommands(ctx.workspaceScope);
 		}),
-		reloadTaskChatSession: workspaceProcedure
+		reloadTaskChatSession: writerWorkspaceProcedure
 			.input(runtimeTaskChatReloadRequestSchema)
 			.output(runtimeTaskChatReloadResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.reloadTaskChatSession(ctx.workspaceScope, input);
 			}),
-		sendTaskChatMessage: workspaceProcedure
+		sendTaskChatMessage: writerWorkspaceProcedure
 			.input(runtimeTaskChatSendRequestSchema)
 			.output(runtimeTaskChatSendResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.sendTaskChatMessage(ctx.workspaceScope, input, ctx.caller);
 			}),
-		abortTaskChatTurn: workspaceProcedure
+		abortTaskChatTurn: writerWorkspaceProcedure
 			.input(runtimeTaskChatAbortRequestSchema)
 			.output(runtimeTaskChatAbortResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.abortTaskChatTurn(ctx.workspaceScope, input);
 			}),
-		cancelTaskChatTurn: workspaceProcedure
+		cancelTaskChatTurn: writerWorkspaceProcedure
 			.input(runtimeTaskChatCancelRequestSchema)
 			.output(runtimeTaskChatCancelResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				return await ctx.runtimeApi.cancelTaskChatTurn(ctx.workspaceScope, input);
 			}),
 		getClineProviderCatalog: t.procedure.output(runtimeClineProviderCatalogResponseSchema).query(async ({ ctx }) => {
@@ -686,10 +741,11 @@ export const runtimeAppRouter = t.router({
 			.mutation(async ({ ctx }) => {
 				return await ctx.workspaceApi.notifyStateUpdated(ctx.workspaceScope);
 			}),
-		saveState: workspaceProcedure
+		saveState: writerWorkspaceProcedure
 			.input(runtimeWorkspaceStateSaveRequestSchema)
 			.output(runtimeWorkspaceStateResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				// Load current board to check existing visibility values before the save.
 				const currentState = await ctx.workspaceApi.loadState(ctx.workspaceScope);
 				const currentCardsById = new Map(
@@ -841,10 +897,11 @@ export const runtimeAppRouter = t.router({
 		}),
 
 		// Sends a new team chat message. Persists it and broadcasts to all workspace clients.
-		sendMessage: workspaceProcedure
+		sendMessage: writerWorkspaceProcedure
 			.input(runtimeTeamChatSendRequestSchema)
 			.output(runtimeTeamChatSendResponseSchema)
 			.mutation(async ({ ctx, input }) => {
+				assertEditorOrAdmin(ctx);
 				if (!ctx.caller) {
 					return { ok: false, error: "No identity available. Sign in to Cline to send team chat messages." };
 				}
@@ -1030,6 +1087,119 @@ export const runtimeAppRouter = t.router({
 					if (sub) ctx.pushManager.removeSubscription(sub.endpoint);
 					return { ok: true };
 				}),
+		}),
+
+		// ── User management (admin/localhost only) ─────────────────────────
+		// Manage remote users and their permission levels.
+		users: t.router({
+			// List all users who have ever connected, with their current role and session count.
+			list: localOnlyProcedure.output(runtimeRemoteUsersListResponseSchema).query(({ ctx }) => {
+				const users = ctx.remoteAuth.listUsers();
+				const sessions = ctx.remoteAuth.listSessions();
+				const sessionCountByUuid = new Map<string, number>();
+				for (const s of sessions) {
+					sessionCountByUuid.set(s.userUuid, (sessionCountByUuid.get(s.userUuid) ?? 0) + 1);
+				}
+				return {
+					users: users.map((u) => ({
+						...u,
+						displayName: u.displayName,
+						activeSessions: sessionCountByUuid.get(u.uuid) ?? 0,
+					})),
+				};
+			}),
+
+			// Promote or demote a user's role.
+			setRole: localOnlyProcedure
+				.input(runtimeRemoteUsersSetRoleRequestSchema)
+				.output(runtimeRemoteOkResponseSchema)
+				.mutation(({ ctx, input }) => {
+					ctx.remoteAuth.setUserRole(input.uuid, input.role);
+					return { ok: true };
+				}),
+
+			// Block a user: reset to viewer and revoke all their sessions immediately.
+			block: localOnlyProcedure
+				.input(runtimeRemoteUsersBlockRequestSchema)
+				.output(runtimeRemoteOkResponseSchema)
+				.mutation(({ ctx, input }) => {
+					ctx.remoteAuth.blockUser(input.uuid);
+					return { ok: true };
+				}),
+
+			// Trust a user: promote to editor (shortcut for setRole with editor).
+			trust: localOnlyProcedure
+				.input(z.object({ uuid: z.string() }))
+				.output(runtimeRemoteOkResponseSchema)
+				.mutation(({ ctx, input }) => {
+					ctx.remoteAuth.setUserRole(input.uuid, "editor");
+					return { ok: true };
+				}),
+		}),
+
+		// ── Device / session management (admin/localhost only) ─────────────
+		// Each active browser session represents a "device" connection.
+		devices: t.router({
+			// List all active sessions across all users.
+			list: localOnlyProcedure.output(runtimeRemoteDevicesListResponseSchema).query(({ ctx }) => {
+				const sessions = ctx.remoteAuth.listSessions();
+				return {
+					sessions: sessions.map((s) => ({
+						id: s.id,
+						email: s.email,
+						userUuid: s.userUuid,
+						displayName: s.displayName,
+						issuedAt: s.issuedAt,
+						expiresAt: s.expiresAt,
+						lastSeen: s.lastSeen,
+						persistent: Number(s.persistent) === 1,
+						// Resolve current role from user record.
+						role: (ctx.remoteAuth.getUserRecord(s.userUuid)?.role ?? "viewer") as RemoteUserRole,
+					})),
+				};
+			}),
+
+			// Revoke a specific session — forces the device to re-authenticate.
+			revoke: localOnlyProcedure
+				.input(runtimeRemoteDevicesRevokeRequestSchema)
+				.output(runtimeRemoteOkResponseSchema)
+				.mutation(({ ctx, input }) => {
+					ctx.remoteAuth.revokeSession(input.sessionId);
+					return { ok: true };
+				}),
+		}),
+
+		// ── Cloudflare tunnel (admin/localhost only) ────────────────────────
+		// Start a temporary trycloudflare.com tunnel for remote access.
+		// Installs cloudflared automatically if not present.
+		tunnel: t.router({
+			// Returns current tunnel state without starting anything.
+			status: localOnlyProcedure.output(runtimeTunnelStatusResponseSchema).query(() => ({
+				running: getTunnelUrl() !== null,
+				url: getTunnelUrl(),
+			})),
+
+			// Installs cloudflared if needed, then opens a quick tunnel.
+			// Resolves when the public URL is ready (up to ~30s).
+			// `port` defaults to the Kanban server port if omitted.
+			start: localOnlyProcedure
+				.input(z.object({ port: z.number().int().min(1).max(65535) }))
+				.output(runtimeTunnelStartResponseSchema)
+				.mutation(async ({ input }) => {
+					try {
+						const url = await startCloudflaredTunnel(input.port);
+						return { ok: true, url };
+					} catch (err) {
+						const error = err instanceof Error ? err.message : String(err);
+						return { ok: false, error };
+					}
+				}),
+
+			// Stops the running tunnel.
+			stop: localOnlyProcedure.output(runtimeTunnelStopResponseSchema).mutation(async () => {
+				await stopCloudflaredTunnel();
+				return { ok: true };
+			}),
 		}),
 	}),
 });

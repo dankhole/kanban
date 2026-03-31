@@ -1247,3 +1247,93 @@ export const runtimePushVapidPublicKeyResponseSchema = z.object({
 	vapidPublicKey: z.string(),
 });
 export type RuntimePushVapidPublicKeyResponse = z.infer<typeof runtimePushVapidPublicKeyResponseSchema>;
+
+// ── User and device management ─────────────────────────────────────────────
+// Role-based access control for remote users.
+// Localhost users are always "admin". Remote users default to "viewer".
+
+export const runtimeRemoteUserRoleSchema = z.enum(["viewer", "editor", "admin"]);
+export type RuntimeRemoteUserRole = z.infer<typeof runtimeRemoteUserRoleSchema>;
+
+// A remote user record returned by management endpoints.
+export const runtimeRemoteUserRecordSchema = z.object({
+	uuid: z.string(),
+	email: z.string(),
+	displayName: z.string().nullable(),
+	createdAt: z.number(),
+	role: runtimeRemoteUserRoleSchema,
+	// Active session count — how many sessions this user currently has.
+	activeSessions: z.number(),
+});
+export type RuntimeRemoteUserRecord = z.infer<typeof runtimeRemoteUserRecordSchema>;
+
+// GET remote.users.list — list all known remote users.
+export const runtimeRemoteUsersListResponseSchema = z.object({
+	users: z.array(runtimeRemoteUserRecordSchema),
+});
+export type RuntimeRemoteUsersListResponse = z.infer<typeof runtimeRemoteUsersListResponseSchema>;
+
+// POST remote.users.setRole — update a user's permission level.
+export const runtimeRemoteUsersSetRoleRequestSchema = z.object({
+	uuid: z.string(),
+	role: runtimeRemoteUserRoleSchema,
+});
+export type RuntimeRemoteUsersSetRoleRequest = z.infer<typeof runtimeRemoteUsersSetRoleRequestSchema>;
+
+// POST remote.users.block — revoke all sessions and reset to viewer.
+export const runtimeRemoteUsersBlockRequestSchema = z.object({
+	uuid: z.string(),
+});
+export type RuntimeRemoteUsersBlockRequest = z.infer<typeof runtimeRemoteUsersBlockRequestSchema>;
+
+// A connected session record for device management.
+export const runtimeRemoteSessionRecordSchema = z.object({
+	id: z.string(),
+	email: z.string(),
+	userUuid: z.string(),
+	displayName: z.string().nullable(),
+	issuedAt: z.number(),
+	expiresAt: z.number(),
+	lastSeen: z.number(),
+	persistent: z.boolean(),
+	role: runtimeRemoteUserRoleSchema,
+});
+export type RuntimeRemoteSessionRecord = z.infer<typeof runtimeRemoteSessionRecordSchema>;
+
+// GET remote.devices.list — list all active sessions (one per connected device/browser).
+export const runtimeRemoteDevicesListResponseSchema = z.object({
+	sessions: z.array(runtimeRemoteSessionRecordSchema),
+});
+export type RuntimeRemoteDevicesListResponse = z.infer<typeof runtimeRemoteDevicesListResponseSchema>;
+
+// POST remote.devices.revoke — terminate a specific session.
+export const runtimeRemoteDevicesRevokeRequestSchema = z.object({
+	sessionId: z.string(),
+});
+export type RuntimeRemoteDevicesRevokeRequest = z.infer<typeof runtimeRemoteDevicesRevokeRequestSchema>;
+
+// Shared ok response.
+export const runtimeRemoteOkResponseSchema = z.object({ ok: z.boolean() });
+export type RuntimeRemoteOkResponse = z.infer<typeof runtimeRemoteOkResponseSchema>;
+
+// ── Cloudflare tunnel ──────────────────────────────────────────────────────
+
+// POST remote.tunnel.start — install cloudflared if needed and open a quick tunnel.
+// Returns the public URL on success.
+export const runtimeTunnelStartResponseSchema = z.object({
+	ok: z.boolean(),
+	url: z.string().optional(),
+	error: z.string().optional(),
+});
+export type RuntimeTunnelStartResponse = z.infer<typeof runtimeTunnelStartResponseSchema>;
+
+// POST remote.tunnel.stop — stop the running tunnel.
+export const runtimeTunnelStopResponseSchema = z.object({ ok: z.boolean() });
+export type RuntimeTunnelStopResponse = z.infer<typeof runtimeTunnelStopResponseSchema>;
+
+// GET remote.tunnel.status — current tunnel state.
+export const runtimeTunnelStatusResponseSchema = z.object({
+	running: z.boolean(),
+	url: z.string().nullable(),
+});
+export type RuntimeTunnelStatusResponse = z.infer<typeof runtimeTunnelStatusResponseSchema>;
