@@ -322,7 +322,7 @@ export function createLoginHandler(deps: CreateLoginHandlerDependencies): LoginH
 						config.publicBaseUrl?.trim() || (hostHeader ? `${scheme}://${hostHeader}` : getKanbanRuntimeOrigin());
 					const redirectUri = `${baseUrl.replace(/\/$/, "")}/auth/callback`;
 					const authorizeUrl = new URL(`${CLINE_API_BASE}/api/v1/auth/authorize`);
-					authorizeUrl.searchParams.set("client_type", "extension");
+					authorizeUrl.searchParams.set("client_type", "web");
 					authorizeUrl.searchParams.set("callback_url", redirectUri);
 					authorizeUrl.searchParams.set("redirect_uri", redirectUri);
 					res.writeHead(302, { Location: authorizeUrl.toString() });
