@@ -386,9 +386,12 @@ interface ManagedUser {
 function UserPermissionsSection({
 	workspaceId,
 	sectionRef,
+	open,
 }: {
 	workspaceId: string | null;
 	sectionRef?: React.RefObject<HTMLHeadingElement>;
+	// Reload the list whenever this becomes true (tab becomes active).
+	open?: boolean;
 }): React.ReactElement {
 	const [users, setUsers] = useState<ManagedUser[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
@@ -418,9 +421,12 @@ function UserPermissionsSection({
 		}
 	}, [workspaceId]);
 
+	// Reload every time the tab becomes visible.
 	useEffect(() => {
-		void load();
-	}, [load]);
+		if (open !== false) {
+			void load();
+		}
+	}, [load, open]);
 
 	const handleRoleChange = useCallback(
 		async (uuid: string, role: UserRole) => {
@@ -572,6 +578,8 @@ export function RuntimeSettingsDialog({
 	const copiedVariableResetTimerRef = useRef<number | null>(null);
 	const shortcutsSectionRef = useRef<HTMLHeadingElement>(null);
 	const usersSectionRef = useRef<HTMLHeadingElement>(null);
+	const isAdmin = identity ? identity.role === "admin" || identity.isLocal : false;
+	const [activeTab, setActiveTab] = useState<"settings" | "users">("settings");
 	const shortcutRowRefs = useRef<Array<HTMLDivElement | null>>([]);
 	const controlsDisabled = isLoading || isSaving || config === null;
 	const commitPromptTemplateDefault = config?.commitPromptTemplateDefault ?? "";
@@ -735,16 +743,14 @@ export function RuntimeSettingsDialog({
 		};
 	}, [initialSection, open]);
 
+	// Switch to Users tab when opened with initialSection="users"
 	useEffect(() => {
-		if (!open || initialSection !== "users") {
-			return;
+		if (!open) return;
+		if (initialSection === "users") {
+			setActiveTab("users");
+		} else {
+			setActiveTab("settings");
 		}
-		const timeout = window.setTimeout(() => {
-			usersSectionRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-		}, 300);
-		return () => {
-			window.clearTimeout(timeout);
-		};
 	}, [initialSection, open]);
 
 	useEffect(() => {
@@ -905,330 +911,364 @@ export function RuntimeSettingsDialog({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogHeader title="Settings" icon={<Settings size={16} />} />
-			<DialogBody>
-				<h5 className="font-semibold text-text-primary m-0">Global</h5>
-				<p
-					className="text-text-secondary font-mono text-xs m-0 break-all"
-					style={{ cursor: config?.globalConfigPath ? "pointer" : undefined }}
-					onClick={() => {
-						if (config?.globalConfigPath) {
-							handleOpenFilePath(config.globalConfigPath);
-						}
-					}}
-				>
-					{config?.globalConfigPath
-						? formatPathForDisplay(config.globalConfigPath)
-						: "~/.cline/kanban/config.json"}
-					{config?.globalConfigPath ? <ExternalLink size={12} className="inline ml-1.5 align-middle" /> : null}
-				</p>
 
-				<h6 className="font-semibold text-text-primary mt-3 mb-0">Agent runtime</h6>
-				{displayedAgents.map((agent) => (
-					<AgentRow
-						key={agent.id}
-						agent={agent}
-						isSelected={agent.id === selectedAgentId}
-						onSelect={() => setSelectedAgentId(agent.id)}
-						disabled={controlsDisabled}
-					/>
-				))}
-				{config === null ? (
-					<p className="text-text-secondary py-2">Checking which CLIs are installed for this project...</p>
-				) : null}
-				<label
-					htmlFor={bypassPermissionsCheckboxId}
-					className="flex items-center gap-2 text-[13px] text-text-primary mt-2 cursor-pointer"
-				>
-					<RadixCheckbox.Root
-						id={bypassPermissionsCheckboxId}
-						aria-label="Enable bypass permissions flag"
-						checked={agentAutonomousModeEnabled}
-						disabled={controlsDisabled}
-						onCheckedChange={(checked) => setAgentAutonomousModeEnabled(checked === true)}
-						className="flex h-4 w-4 cursor-pointer items-center justify-center rounded border border-border bg-surface-2 data-[state=checked]:bg-accent data-[state=checked]:border-accent disabled:cursor-default disabled:opacity-40"
-					>
-						<RadixCheckbox.Indicator>
-							<Check size={12} className="text-white" />
-						</RadixCheckbox.Indicator>
-					</RadixCheckbox.Root>
-					<span>Enable bypass permissions flag</span>
-				</label>
-				<p className="text-text-secondary text-[13px] ml-6 mt-0 mb-0">
-					Allows agents to use tools without stopping for permission. Use at your own risk.
-				</p>
+			{/* Tab bar — only shown to admins */}
+			{isAdmin ? (
+				<div className="flex shrink-0 border-b border-border bg-surface-2 px-2">
+					{(["settings", "users"] as const).map((tab) => (
+						<button
+							key={tab}
+							type="button"
+							onClick={() => setActiveTab(tab)}
+							className={cn(
+								"px-3 py-2 text-[13px] font-medium transition-colors border-b-2 -mb-px",
+								activeTab === tab
+									? "border-accent text-text-primary"
+									: "border-transparent text-text-secondary hover:text-text-primary",
+							)}
+						>
+							{tab === "settings" ? "Settings" : "Users"}
+						</button>
+					))}
+				</div>
+			) : null}
 
-				{selectedAgentId === "cline" ? (
-					<ClineSetupSection
-						controller={clineSettings}
-						mcpController={clineMcpSettings}
-						controlsDisabled={controlsDisabled}
+			{/* Users tab */}
+			{isAdmin && activeTab === "users" ? (
+				<DialogBody>
+					<UserPermissionsSection
 						workspaceId={workspaceId}
-						onError={setSaveError}
+						sectionRef={usersSectionRef}
+						open={open && activeTab === "users"}
 					/>
-				) : null}
+				</DialogBody>
+			) : null}
 
-				<div className="flex items-center justify-between mt-4 mb-1">
-					<h6 className="font-semibold text-text-primary m-0">Git button prompts</h6>
-				</div>
-				<p className="text-text-secondary text-[13px] mt-0 mb-2">
-					Modify the prompts sent to the agent when using Commit or Make PR on tasks in Review.
-				</p>
-				<div className="flex items-center justify-between gap-2 mb-2">
-					<select
-						value={selectedPromptVariant}
-						onChange={(event) => setSelectedPromptVariant(event.target.value as TaskGitAction)}
-						disabled={controlsDisabled}
-						className="h-8 rounded-md border border-border bg-surface-2 px-2 text-[13px] text-text-primary focus:border-border-focus focus:outline-none"
-						style={{ minWidth: 220 }}
-					>
-						{GIT_PROMPT_VARIANT_OPTIONS.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</select>
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={handleResetSelectedPrompt}
-						disabled={controlsDisabled || isSelectedPromptAtDefault}
-					>
-						Reset
-					</Button>
-				</div>
-				<textarea
-					rows={5}
-					value={selectedPromptValue}
-					onChange={(event) => handleSelectedPromptChange(event.target.value)}
-					placeholder={selectedPromptPlaceholder}
-					disabled={controlsDisabled}
-					className="w-full rounded-md border border-border bg-surface-2 p-3 text-[13px] text-text-primary font-mono placeholder:text-text-tertiary focus:border-border-focus focus:outline-none resize-none disabled:opacity-40"
-				/>
-				<p className="text-text-secondary text-[13px] mt-2 mb-2.5">
-					Use{" "}
-					<InlineUtilityButton
-						text={
-							copiedVariableToken === TASK_GIT_BASE_REF_PROMPT_VARIABLE.token
-								? "Copied!"
-								: TASK_GIT_BASE_REF_PROMPT_VARIABLE.token
-						}
-						monospace
-						widthCh={Math.max(TASK_GIT_BASE_REF_PROMPT_VARIABLE.token.length, "Copied!".length) + 2}
+			{/* Settings tab (default) */}
+			{activeTab === "settings" ? (
+				<DialogBody>
+					<h5 className="font-semibold text-text-primary m-0">Global</h5>
+					<p
+						className="text-text-secondary font-mono text-xs m-0 break-all"
+						style={{ cursor: config?.globalConfigPath ? "pointer" : undefined }}
 						onClick={() => {
-							handleCopyVariableToken(TASK_GIT_BASE_REF_PROMPT_VARIABLE.token);
+							if (config?.globalConfigPath) {
+								handleOpenFilePath(config.globalConfigPath);
+							}
 						}}
-						disabled={controlsDisabled}
-					/>{" "}
-					to reference {TASK_GIT_BASE_REF_PROMPT_VARIABLE.description}
-				</p>
-				<h6 className="font-semibold text-text-primary mt-4 mb-2">Notifications</h6>
-				<div className="flex items-center gap-2">
-					<RadixSwitch.Root
-						checked={readyForReviewNotificationsEnabled}
-						disabled={controlsDisabled}
-						onCheckedChange={setReadyForReviewNotificationsEnabled}
-						className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer disabled:opacity-40"
 					>
-						<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
-					</RadixSwitch.Root>
-					<span className="text-[13px] text-text-primary">Notify when a task is ready for review</span>
-				</div>
-				<div className="flex items-center gap-2 mt-2">
-					<p className="text-text-secondary text-[13px] m-0">
-						Browser permission: {formatNotificationPermissionStatus(notificationPermission)}
+						{config?.globalConfigPath
+							? formatPathForDisplay(config.globalConfigPath)
+							: "~/.cline/kanban/config.json"}
+						{config?.globalConfigPath ? <ExternalLink size={12} className="inline ml-1.5 align-middle" /> : null}
 					</p>
-					{notificationPermission !== "granted" && notificationPermission !== "unsupported" ? (
-						<InlineUtilityButton
-							text="Request permission"
-							onClick={handleRequestPermission}
+
+					<h6 className="font-semibold text-text-primary mt-3 mb-0">Agent runtime</h6>
+					{displayedAgents.map((agent) => (
+						<AgentRow
+							key={agent.id}
+							agent={agent}
+							isSelected={agent.id === selectedAgentId}
+							onSelect={() => setSelectedAgentId(agent.id)}
 							disabled={controlsDisabled}
 						/>
+					))}
+					{config === null ? (
+						<p className="text-text-secondary py-2">Checking which CLIs are installed for this project...</p>
 					) : null}
-				</div>
-				{/* Push subscription status — shown only when browser permission is granted */}
-				{notificationPermission === "granted" ? (
-					<div className="flex items-center gap-2 mt-1.5 mb-2">
-						{pushSubscription.status === "subscribed" ? (
-							<p className="text-text-secondary text-[13px] m-0">
-								Push notifications: <span className="text-status-green">registered</span>
-							</p>
-						) : pushSubscription.status === "not-subscribed" ? (
-							<>
-								<p className="text-text-secondary text-[13px] m-0">
-									Push notifications: <span className="text-status-orange">not registered</span>
-								</p>
-								<InlineUtilityButton
-									text={pushSubscription.isRegistering ? "Registering…" : "Re-register"}
-									onClick={() => void pushSubscription.register()}
-									disabled={controlsDisabled || pushSubscription.isRegistering}
-								/>
-							</>
-						) : pushSubscription.status === "checking" ? (
-							<p className="text-text-secondary text-[13px] m-0">Push notifications: checking…</p>
-						) : null}
-						{pushSubscription.error ? (
-							<p className="text-status-red text-[12px] m-0">{pushSubscription.error}</p>
-						) : null}
+					<label
+						htmlFor={bypassPermissionsCheckboxId}
+						className="flex items-center gap-2 text-[13px] text-text-primary mt-2 cursor-pointer"
+					>
+						<RadixCheckbox.Root
+							id={bypassPermissionsCheckboxId}
+							aria-label="Enable bypass permissions flag"
+							checked={agentAutonomousModeEnabled}
+							disabled={controlsDisabled}
+							onCheckedChange={(checked) => setAgentAutonomousModeEnabled(checked === true)}
+							className="flex h-4 w-4 cursor-pointer items-center justify-center rounded border border-border bg-surface-2 data-[state=checked]:bg-accent data-[state=checked]:border-accent disabled:cursor-default disabled:opacity-40"
+						>
+							<RadixCheckbox.Indicator>
+								<Check size={12} className="text-white" />
+							</RadixCheckbox.Indicator>
+						</RadixCheckbox.Root>
+						<span>Enable bypass permissions flag</span>
+					</label>
+					<p className="text-text-secondary text-[13px] ml-6 mt-0 mb-0">
+						Allows agents to use tools without stopping for permission. Use at your own risk.
+					</p>
+
+					{selectedAgentId === "cline" ? (
+						<ClineSetupSection
+							controller={clineSettings}
+							mcpController={clineMcpSettings}
+							controlsDisabled={controlsDisabled}
+							workspaceId={workspaceId}
+							onError={setSaveError}
+						/>
+					) : null}
+
+					<div className="flex items-center justify-between mt-4 mb-1">
+						<h6 className="font-semibold text-text-primary m-0">Git button prompts</h6>
 					</div>
-				) : (
-					<div className="mb-2" />
-				)}
-
-				<PushNotificationSettings
-					state={pushNotifications.state}
-					error={pushNotifications.error}
-					onSubscribe={pushNotifications.subscribe}
-					onUnsubscribe={pushNotifications.unsubscribe}
-					disabled={controlsDisabled}
-				/>
-
-				{/* User permissions — visible to admins and localhost users only */}
-				{identity && (identity.role === "admin" || identity.isLocal) ? (
-					<>
-						<div className="mt-5 border-t border-border" />
-						<UserPermissionsSection workspaceId={workspaceId} sectionRef={usersSectionRef} />
-					</>
-				) : null}
-
-				<h5 className="font-semibold text-text-primary mt-4 mb-0">Project</h5>
-				<p
-					className="text-text-secondary font-mono text-xs m-0 break-all"
-					style={{ cursor: config?.projectConfigPath ? "pointer" : undefined }}
-					onClick={() => {
-						if (config?.projectConfigPath) {
-							handleOpenFilePath(config.projectConfigPath);
-						}
-					}}
-				>
-					{config?.projectConfigPath
-						? formatPathForDisplay(config.projectConfigPath)
-						: "<project>/.cline/kanban/config.json"}
-					{config?.projectConfigPath ? <ExternalLink size={12} className="inline ml-1.5 align-middle" /> : null}
-				</p>
-
-				<div className="flex items-center justify-between mt-3 mb-2">
-					<h6 ref={shortcutsSectionRef} className="font-semibold text-text-primary m-0">
-						Script shortcuts
-					</h6>
-					<Button
-						variant="ghost"
-						size="sm"
-						icon={<Plus size={14} />}
-						onClick={() => {
-							setShortcuts((current) => {
-								const nextLabel = getNextShortcutLabel(current, "Run");
-								setPendingShortcutScrollIndex(current.length);
-								return [
-									...current,
-									{
-										label: nextLabel,
-										command: "",
-										icon: "play",
-									},
-								];
-							});
-						}}
-						disabled={controlsDisabled}
-					>
-						Add
-					</Button>
-				</div>
-
-				{shortcuts.map((shortcut, shortcutIndex) => (
-					<div
-						key={shortcutIndex}
-						ref={(node) => {
-							shortcutRowRefs.current[shortcutIndex] = node;
-						}}
-						className="grid gap-2 mb-1"
-						style={{ gridTemplateColumns: "max-content 1fr 2fr auto" }}
-					>
-						<ShortcutIconPicker
-							value={shortcut.icon}
-							onSelect={(icon) =>
-								setShortcuts((current) =>
-									current.map((item, itemIndex) => (itemIndex === shortcutIndex ? { ...item, icon } : item)),
-								)
-							}
-						/>
-						<input
-							value={shortcut.label}
-							onChange={(event) =>
-								setShortcuts((current) =>
-									current.map((item, itemIndex) =>
-										itemIndex === shortcutIndex ? { ...item, label: event.target.value } : item,
-									),
-								)
-							}
-							placeholder="Label"
-							className="h-7 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
-						/>
-						<input
-							value={shortcut.command}
-							onChange={(event) =>
-								setShortcuts((current) =>
-									current.map((item, itemIndex) =>
-										itemIndex === shortcutIndex ? { ...item, command: event.target.value } : item,
-									),
-								)
-							}
-							placeholder="Command"
-							className="h-7 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
-						/>
+					<p className="text-text-secondary text-[13px] mt-0 mb-2">
+						Modify the prompts sent to the agent when using Commit or Make PR on tasks in Review.
+					</p>
+					<div className="flex items-center justify-between gap-2 mb-2">
+						<select
+							value={selectedPromptVariant}
+							onChange={(event) => setSelectedPromptVariant(event.target.value as TaskGitAction)}
+							disabled={controlsDisabled}
+							className="h-8 rounded-md border border-border bg-surface-2 px-2 text-[13px] text-text-primary focus:border-border-focus focus:outline-none"
+							style={{ minWidth: 220 }}
+						>
+							{GIT_PROMPT_VARIANT_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
 						<Button
 							variant="ghost"
 							size="sm"
-							icon={<X size={14} />}
-							aria-label={`Remove shortcut ${shortcut.label}`}
-							onClick={() =>
-								setShortcuts((current) => current.filter((_, itemIndex) => itemIndex !== shortcutIndex))
+							onClick={handleResetSelectedPrompt}
+							disabled={controlsDisabled || isSelectedPromptAtDefault}
+						>
+							Reset
+						</Button>
+					</div>
+					<textarea
+						rows={5}
+						value={selectedPromptValue}
+						onChange={(event) => handleSelectedPromptChange(event.target.value)}
+						placeholder={selectedPromptPlaceholder}
+						disabled={controlsDisabled}
+						className="w-full rounded-md border border-border bg-surface-2 p-3 text-[13px] text-text-primary font-mono placeholder:text-text-tertiary focus:border-border-focus focus:outline-none resize-none disabled:opacity-40"
+					/>
+					<p className="text-text-secondary text-[13px] mt-2 mb-2.5">
+						Use{" "}
+						<InlineUtilityButton
+							text={
+								copiedVariableToken === TASK_GIT_BASE_REF_PROMPT_VARIABLE.token
+									? "Copied!"
+									: TASK_GIT_BASE_REF_PROMPT_VARIABLE.token
 							}
-						/>
+							monospace
+							widthCh={Math.max(TASK_GIT_BASE_REF_PROMPT_VARIABLE.token.length, "Copied!".length) + 2}
+							onClick={() => {
+								handleCopyVariableToken(TASK_GIT_BASE_REF_PROMPT_VARIABLE.token);
+							}}
+							disabled={controlsDisabled}
+						/>{" "}
+						to reference {TASK_GIT_BASE_REF_PROMPT_VARIABLE.description}
+					</p>
+					<h6 className="font-semibold text-text-primary mt-4 mb-2">Notifications</h6>
+					<div className="flex items-center gap-2">
+						<RadixSwitch.Root
+							checked={readyForReviewNotificationsEnabled}
+							disabled={controlsDisabled}
+							onCheckedChange={setReadyForReviewNotificationsEnabled}
+							className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer disabled:opacity-40"
+						>
+							<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
+						</RadixSwitch.Root>
+						<span className="text-[13px] text-text-primary">Notify when a task is ready for review</span>
 					</div>
-				))}
-				{shortcuts.length === 0 ? (
-					<p className="text-text-secondary text-[13px]">No shortcuts configured.</p>
-				) : null}
+					<div className="flex items-center gap-2 mt-2">
+						<p className="text-text-secondary text-[13px] m-0">
+							Browser permission: {formatNotificationPermissionStatus(notificationPermission)}
+						</p>
+						{notificationPermission !== "granted" && notificationPermission !== "unsupported" ? (
+							<InlineUtilityButton
+								text="Request permission"
+								onClick={handleRequestPermission}
+								disabled={controlsDisabled}
+							/>
+						) : null}
+					</div>
+					{/* Push subscription status — shown only when browser permission is granted */}
+					{notificationPermission === "granted" ? (
+						<div className="flex items-center gap-2 mt-1.5 mb-2">
+							{pushSubscription.status === "subscribed" ? (
+								<p className="text-text-secondary text-[13px] m-0">
+									Push notifications: <span className="text-status-green">registered</span>
+								</p>
+							) : pushSubscription.status === "not-subscribed" ? (
+								<>
+									<p className="text-text-secondary text-[13px] m-0">
+										Push notifications: <span className="text-status-orange">not registered</span>
+									</p>
+									<InlineUtilityButton
+										text={pushSubscription.isRegistering ? "Registering…" : "Re-register"}
+										onClick={() => void pushSubscription.register()}
+										disabled={controlsDisabled || pushSubscription.isRegistering}
+									/>
+								</>
+							) : pushSubscription.status === "checking" ? (
+								<p className="text-text-secondary text-[13px] m-0">Push notifications: checking…</p>
+							) : null}
+							{pushSubscription.error ? (
+								<p className="text-status-red text-[12px] m-0">{pushSubscription.error}</p>
+							) : null}
+						</div>
+					) : (
+						<div className="mb-2" />
+					)}
 
-				<h5 className="font-semibold text-text-primary mt-4 mb-0">QR Code</h5>
-				<p className="text-text-secondary text-[13px] mt-1 mb-3">
-					Scan with your phone to open this board on a mobile device.
-				</p>
-				<div className="flex flex-col items-center gap-2">
-					<div className="bg-white p-3 rounded-md inline-flex">
-						<QRCodeSVG value={window.location.origin} size={160} />
+					<PushNotificationSettings
+						state={pushNotifications.state}
+						error={pushNotifications.error}
+						onSubscribe={pushNotifications.subscribe}
+						onUnsubscribe={pushNotifications.unsubscribe}
+						disabled={controlsDisabled}
+					/>
+
+					<h5 className="font-semibold text-text-primary mt-4 mb-0">Project</h5>
+					<p
+						className="text-text-secondary font-mono text-xs m-0 break-all"
+						style={{ cursor: config?.projectConfigPath ? "pointer" : undefined }}
+						onClick={() => {
+							if (config?.projectConfigPath) {
+								handleOpenFilePath(config.projectConfigPath);
+							}
+						}}
+					>
+						{config?.projectConfigPath
+							? formatPathForDisplay(config.projectConfigPath)
+							: "<project>/.cline/kanban/config.json"}
+						{config?.projectConfigPath ? <ExternalLink size={12} className="inline ml-1.5 align-middle" /> : null}
+					</p>
+
+					<div className="flex items-center justify-between mt-3 mb-2">
+						<h6 ref={shortcutsSectionRef} className="font-semibold text-text-primary m-0">
+							Script shortcuts
+						</h6>
+						<Button
+							variant="ghost"
+							size="sm"
+							icon={<Plus size={14} />}
+							onClick={() => {
+								setShortcuts((current) => {
+									const nextLabel = getNextShortcutLabel(current, "Run");
+									setPendingShortcutScrollIndex(current.length);
+									return [
+										...current,
+										{
+											label: nextLabel,
+											command: "",
+											icon: "play",
+										},
+									];
+								});
+							}}
+							disabled={controlsDisabled}
+						>
+							Add
+						</Button>
 					</div>
-					<span className="text-text-secondary text-sm font-mono">{window.location.origin}</span>
-					{/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(window.location.origin) ? (
-						<div className="flex items-center gap-1.5 text-text-tertiary text-xs mt-1">
-							<Info size={12} className="shrink-0" />
-							<span>
-								This URL points to localhost. Restart with{" "}
-								<code className="text-text-secondary">--host 0.0.0.0</code> for phone access over your local
-								network.
-							</span>
+
+					{shortcuts.map((shortcut, shortcutIndex) => (
+						<div
+							key={shortcutIndex}
+							ref={(node) => {
+								shortcutRowRefs.current[shortcutIndex] = node;
+							}}
+							className="grid gap-2 mb-1"
+							style={{ gridTemplateColumns: "max-content 1fr 2fr auto" }}
+						>
+							<ShortcutIconPicker
+								value={shortcut.icon}
+								onSelect={(icon) =>
+									setShortcuts((current) =>
+										current.map((item, itemIndex) =>
+											itemIndex === shortcutIndex ? { ...item, icon } : item,
+										),
+									)
+								}
+							/>
+							<input
+								value={shortcut.label}
+								onChange={(event) =>
+									setShortcuts((current) =>
+										current.map((item, itemIndex) =>
+											itemIndex === shortcutIndex ? { ...item, label: event.target.value } : item,
+										),
+									)
+								}
+								placeholder="Label"
+								className="h-7 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
+							/>
+							<input
+								value={shortcut.command}
+								onChange={(event) =>
+									setShortcuts((current) =>
+										current.map((item, itemIndex) =>
+											itemIndex === shortcutIndex ? { ...item, command: event.target.value } : item,
+										),
+									)
+								}
+								placeholder="Command"
+								className="h-7 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
+							/>
+							<Button
+								variant="ghost"
+								size="sm"
+								icon={<X size={14} />}
+								aria-label={`Remove shortcut ${shortcut.label}`}
+								onClick={() =>
+									setShortcuts((current) => current.filter((_, itemIndex) => itemIndex !== shortcutIndex))
+								}
+							/>
+						</div>
+					))}
+					{shortcuts.length === 0 ? (
+						<p className="text-text-secondary text-[13px]">No shortcuts configured.</p>
+					) : null}
+
+					<h5 className="font-semibold text-text-primary mt-4 mb-0">QR Code</h5>
+					<p className="text-text-secondary text-[13px] mt-1 mb-3">
+						Scan with your phone to open this board on a mobile device.
+					</p>
+					<div className="flex flex-col items-center gap-2">
+						<div className="bg-white p-3 rounded-md inline-flex">
+							<QRCodeSVG value={window.location.origin} size={160} />
+						</div>
+						<span className="text-text-secondary text-sm font-mono">{window.location.origin}</span>
+						{/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(window.location.origin) ? (
+							<div className="flex items-center gap-1.5 text-text-tertiary text-xs mt-1">
+								<Info size={12} className="shrink-0" />
+								<span>
+									This URL points to localhost. Restart with{" "}
+									<code className="text-text-secondary">--host 0.0.0.0</code> for phone access over your local
+									network.
+								</span>
+							</div>
+						) : null}
+					</div>
+
+					{saveError ? (
+						<div className="flex gap-2 rounded-md border border-status-red/30 bg-status-red/5 p-3 text-[13px] mt-3">
+							<span className="text-text-primary">{saveError}</span>
 						</div>
 					) : null}
-				</div>
+				</DialogBody>
+			) : null}
 
-				{saveError ? (
-					<div className="flex gap-2 rounded-md border border-status-red/30 bg-status-red/5 p-3 text-[13px] mt-3">
-						<span className="text-text-primary">{saveError}</span>
-					</div>
-				) : null}
-			</DialogBody>
-			<DialogFooter>
-				<Button onClick={() => onOpenChange(false)} disabled={controlsDisabled}>
-					Cancel
-				</Button>
-				<Button
-					variant="primary"
-					onClick={() => void handleSave()}
-					disabled={controlsDisabled || !hasUnsavedChanges}
-				>
-					Save
-				</Button>
-			</DialogFooter>
+			{/* Footer — only on settings tab */}
+			{activeTab === "settings" ? (
+				<DialogFooter>
+					<Button onClick={() => onOpenChange(false)} disabled={controlsDisabled}>
+						Cancel
+					</Button>
+					<Button
+						variant="primary"
+						onClick={() => void handleSave()}
+						disabled={controlsDisabled || !hasUnsavedChanges}
+					>
+						Save
+					</Button>
+				</DialogFooter>
+			) : null}
 		</Dialog>
 	);
 }
