@@ -2,11 +2,12 @@
 // The rest of Kanban should talk to the SDK through local service modules so
 // auth, catalog, and provider-settings behavior stay behind one boundary.
 
-import { type CreateMcpToolsOptions, createMcpTools, type Tool } from "@clinebot/agents";
 import {
 	ClineAccountService,
 	type ClineAccountUser,
 	type ClineOrganization,
+	type CreateMcpToolsOptions,
+	createMcpTools,
 	DEFAULT_EXTERNAL_IDCS_CLIENT_ID,
 	DEFAULT_EXTERNAL_IDCS_SCOPES,
 	DEFAULT_EXTERNAL_IDCS_URL,
@@ -17,13 +18,15 @@ import {
 	getValidOcaCredentials,
 	getValidOpenAICodexCredentials,
 	InMemoryMcpManager,
+	LlmsModels,
+	LlmsProviders,
 	loginClineOAuth,
 	loginOcaOAuth,
 	loginOpenAICodex,
 	type OcaOAuthProviderOptions,
 	ProviderSettingsManager,
+	type Tool,
 } from "@clinebot/core/node";
-import { LlmsProviders, LlmsModels as llmsModels } from "@clinebot/llms";
 
 export type ManagedClineOauthProviderId = "cline" | "oca" | "openai-codex";
 export type SdkReasoningEffort = NonNullable<NonNullable<LlmsProviders.ProviderSettings["reasoning"]>["effort"]>;
@@ -208,11 +211,11 @@ export async function loginManagedOauthProvider(input: {
 }
 
 export async function listSdkProviderCatalog(): Promise<SdkProviderCatalogItem[]> {
-	return await llmsModels.getAllProviders();
+	return await LlmsModels.getAllProviders();
 }
 
 export async function listSdkProviderModels(providerId: string): Promise<SdkProviderModelRecord> {
-	return await llmsModels.getModelsForProvider(providerId);
+	return await LlmsModels.getModelsForProvider(providerId);
 }
 
 export function supportsSdkModelThinking(modelInfo: LlmsProviders.ModelInfo): boolean {

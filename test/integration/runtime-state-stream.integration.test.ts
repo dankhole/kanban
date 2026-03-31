@@ -38,6 +38,7 @@ interface RuntimeStreamClient {
 		timeoutMs?: number,
 	) => Promise<RuntimeStateStreamMessage>;
 	collectFor: (durationMs: number) => Promise<RuntimeStateStreamMessage[]>;
+	drainMessages: () => RuntimeStateStreamMessage[];
 	close: () => Promise<void>;
 }
 
@@ -380,6 +381,11 @@ async function connectRuntimeStream(url: string): Promise<RuntimeStreamClient> {
 			await new Promise((resolveDelay) => {
 				setTimeout(resolveDelay, durationMs);
 			});
+			const messages = queue.slice();
+			queue.length = 0;
+			return messages;
+		},
+		drainMessages: () => {
 			const messages = queue.slice();
 			queue.length = 0;
 			return messages;
@@ -779,7 +785,7 @@ describe.sequential("runtime state stream integration", () => {
 			expect(workspaceUpdateB.workspaceState.revision).toBe(previousRevision + 1);
 			expect(workspaceUpdateB.workspaceState.board.columns[0]?.cards[0]?.prompt).toBe("Realtime Task");
 
-			const streamAMessages = await streamA.collectFor(500);
+			const streamAMessages = streamA.drainMessages();
 			expect(
 				streamAMessages.some(
 					(message) => message.type === "workspace_state_updated" && message.workspaceId === workspaceBId,
@@ -978,7 +984,7 @@ describe.sequential("runtime state stream integration", () => {
 			expect(initialTaskMetadata).not.toBeNull();
 			expect(initialTaskMetadata?.changedFiles ?? 0).toBe(0);
 			expect(snapshot.workspaceMetadata?.taskWorkspaces.some((task) => task.taskId === trashTaskId)).toBe(false);
-			const messagesAfterInitialSnapshot = await stream.collectFor(250);
+			const messagesAfterInitialSnapshot = stream.drainMessages();
 			expect(messagesAfterInitialSnapshot.some((message) => message.type === "workspace_metadata_updated")).toBe(
 				false,
 			);

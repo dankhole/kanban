@@ -177,7 +177,9 @@ export class InMemoryClineSessionRuntime implements ClineSessionRuntime {
 					enableTools: true,
 					enableSpawnAgent: false,
 					enableAgentTeams: false,
-					maxConsecutiveMistakes: DEFAULT_CLINE_MAX_CONSECUTIVE_MISTAKES,
+					execution: {
+						maxConsecutiveMistakes: DEFAULT_CLINE_MAX_CONSECUTIVE_MISTAKES,
+					},
 					systemPrompt: request.systemPrompt,
 					...(mcpToolBundle && mcpToolBundle.tools.length > 0 ? { extraTools: mcpToolBundle.tools } : {}),
 				},

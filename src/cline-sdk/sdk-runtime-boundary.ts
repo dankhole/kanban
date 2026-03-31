@@ -3,19 +3,20 @@
 // flow through this boundary so the rest of Kanban stays decoupled from the
 // SDK package layout.
 
-import type { ToolApprovalRequest, ToolApprovalResult } from "@clinebot/agents";
-import { getClineDefaultSystemPrompt } from "@clinebot/agents";
 import {
 	buildWorkspaceMetadata,
+	type LlmsProviders as ClineSdkProviders,
 	createSessionHost,
 	createUserInstructionConfigWatcher,
+	getClineDefaultSystemPrompt,
 	listAvailableWorkflowsFromWatcher,
 	loadRulesForSystemPromptFromWatcher,
 	resolveWorkflowSlashCommandFromWatcher,
 	type SessionHost,
+	type ToolApprovalRequest,
+	type ToolApprovalResult,
 	type UserInstructionConfigWatcher,
 } from "@clinebot/core/node";
-import type { LlmsProviders as ClineSdkProviders } from "@clinebot/llms";
 
 export type ClineSdkSessionHost = SessionHost;
 export interface ClineSdkContentStartTextEvent {
@@ -197,7 +198,9 @@ export type ClineSdkToolApprovalResult = ToolApprovalResult;
 export async function createClineSdkSessionHost(): Promise<ClineSdkSessionHost> {
 	return await createSessionHost({
 		backendMode: "auto",
-		autoStartRpcServer: true,
+		rpc: {
+			autoStart: true,
+		},
 	});
 }
 
