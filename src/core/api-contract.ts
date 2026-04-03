@@ -545,6 +545,11 @@ export const runtimeClineKanbanAccessResponseSchema = z.object({
 });
 export type RuntimeClineKanbanAccessResponse = z.infer<typeof runtimeClineKanbanAccessResponseSchema>;
 
+export const runtimeFeaturebaseTokenResponseSchema = z.object({
+	featurebaseJwt: z.string(),
+});
+export type RuntimeFeaturebaseTokenResponse = z.infer<typeof runtimeFeaturebaseTokenResponseSchema>;
+
 export const runtimeClineProviderCatalogItemSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -608,6 +613,23 @@ export type RuntimeClineAddProviderRequest = z.infer<typeof runtimeClineAddProvi
 export const runtimeClineAddProviderResponseSchema = runtimeClineProviderSettingsSchema;
 export type RuntimeClineAddProviderResponse = z.infer<typeof runtimeClineAddProviderResponseSchema>;
 
+export const runtimeClineUpdateProviderRequestSchema = z.object({
+	providerId: z.string(),
+	name: z.string().optional(),
+	baseUrl: z.string().optional(),
+	apiKey: z.string().nullable().optional(),
+	headers: z.record(z.string(), z.string()).nullable().optional(),
+	timeoutMs: z.number().int().positive().nullable().optional(),
+	models: z.array(z.string()).optional(),
+	defaultModelId: z.string().nullable().optional(),
+	modelsSourceUrl: z.string().nullable().optional(),
+	capabilities: z.array(runtimeClineProviderCapabilitySchema).optional(),
+});
+export type RuntimeClineUpdateProviderRequest = z.infer<typeof runtimeClineUpdateProviderRequestSchema>;
+
+export const runtimeClineUpdateProviderResponseSchema = runtimeClineProviderSettingsSchema;
+export type RuntimeClineUpdateProviderResponse = z.infer<typeof runtimeClineUpdateProviderResponseSchema>;
+
 export const runtimeClineOauthLoginRequestSchema = z.object({
 	provider: runtimeClineOauthProviderSchema,
 	baseUrl: z.string().nullable().optional(),
@@ -628,6 +650,24 @@ export const runtimeClineProviderSettingsSaveRequestSchema = z.object({
 	apiKey: z.string().nullable().optional(),
 	baseUrl: z.string().nullable().optional(),
 	reasoningEffort: runtimeClineReasoningEffortSchema.nullable().optional(),
+	region: z.string().nullable().optional(),
+	aws: z
+		.object({
+			accessKey: z.string().nullable().optional(),
+			secretKey: z.string().nullable().optional(),
+			sessionToken: z.string().nullable().optional(),
+			region: z.string().nullable().optional(),
+			profile: z.string().nullable().optional(),
+			authentication: z.enum(["iam", "api-key", "profile"]).nullable().optional(),
+			endpoint: z.string().nullable().optional(),
+		})
+		.optional(),
+	gcp: z
+		.object({
+			projectId: z.string().nullable().optional(),
+			region: z.string().nullable().optional(),
+		})
+		.optional(),
 });
 export type RuntimeClineProviderSettingsSaveRequest = z.infer<typeof runtimeClineProviderSettingsSaveRequestSchema>;
 
