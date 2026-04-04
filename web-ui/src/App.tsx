@@ -10,10 +10,13 @@ import { CardDetailView } from "@/components/card-detail-view";
 import { ClearTrashDialog } from "@/components/clear-trash-dialog";
 import { DebugDialog } from "@/components/debug-dialog";
 import { AgentTerminalPanel } from "@/components/detail-panels/agent-terminal-panel";
+import { DiagnosticsDialog } from "@/components/diagnostics-dialog";
 import { GitHistoryView } from "@/components/git-history-view";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ProjectNavigationPanel } from "@/components/project-navigation-panel";
+import { ReconnectionBanner, type ReconnectionBannerStatus } from "@/components/reconnection-banner";
 import { RuntimeSettingsDialog, type RuntimeSettingsSection } from "@/components/runtime-settings-dialog";
+import { ServerDirectoryBrowser } from "@/components/server-directory-browser";
 import { StartupOnboardingDialog } from "@/components/startup-onboarding-dialog";
 import { TaskCreateDialog } from "@/components/task-create-dialog";
 import { TaskInlineCreateCard } from "@/components/task-inline-create-card";
@@ -37,6 +40,7 @@ import { RuntimeDisconnectedFallback } from "@/hooks/runtime-disconnected-fallba
 import { useAppHotkeys } from "@/hooks/use-app-hotkeys";
 import { useBoardInteractions } from "@/hooks/use-board-interactions";
 import { useDebugTools } from "@/hooks/use-debug-tools";
+import { useDiagnostics } from "@/hooks/use-diagnostics";
 import { useDocumentVisibility } from "@/hooks/use-document-visibility";
 import { useFeaturebaseFeedbackWidget } from "@/hooks/use-featurebase-feedback-widget";
 import { useGitActions } from "@/hooks/use-git-actions";
@@ -90,6 +94,12 @@ export default function App(): ReactElement {
 	const [pendingTaskStartAfterEditId, setPendingTaskStartAfterEditId] = useState<string | null>(null);
 	const taskEditorResetRef = useRef<() => void>(() => {});
 	const lastStreamErrorRef = useRef<string | null>(null);
+
+	// -- Reconnection banner state (remote mode only) --
+	const [reconnectionBannerStatus, setReconnectionBannerStatus] = useState<ReconnectionBannerStatus | null>(null);
+	const reconnectionBannerTimerRef = useRef<number | null>(null);
+	const wasDisconnectedRef = useRef(false);
+
 	const handleProjectSwitchStart = useCallback(() => {
 		setCanPersistWorkspaceState(false);
 		setSelectedTaskId(null);
@@ -116,15 +126,32 @@ export default function App(): ReactElement {
 		isProjectSwitching,
 		handleSelectProject,
 		handleAddProject,
+		handleAddProjectByPath,
 		handleConfirmInitializeGitProject,
 		handleCancelInitializeGitProject,
 		handleRemoveProject,
 		pendingGitInitializationPath,
 		isInitializingGitProject,
+		isLocal,
+		reconnectAttemptCount,
 		resetProjectNavigationState,
 	} = useProjectNavigation({
 		onProjectSwitchStart: handleProjectSwitchStart,
 	});
+	const [isServerDirectoryBrowserOpen, setIsServerDirectoryBrowserOpen] = useState(false);
+	const gatedHandleAddProject = useCallback(() => {
+		if (isLocal) {
+			void handleAddProject();
+		} else {
+			setIsServerDirectoryBrowserOpen(true);
+		}
+	}, [handleAddProject, isLocal]);
+	const handleServerDirectorySelected = useCallback(
+		(path: string) => {
+			void handleAddProjectByPath(path);
+		},
+		[handleAddProjectByPath],
+	);
 	const activeNotificationWorkspaceId = navigationCurrentProjectId;
 	const isDocumentVisible = useDocumentVisibility();
 	const isInitialRuntimeLoad =
@@ -173,6 +200,34 @@ export default function App(): ReactElement {
 		settingsRuntimeProjectConfig,
 		onOpenStartupOnboardingDialog: handleOpenStartupOnboardingDialog,
 	});
+	const { isDiagnosticsOpen, diagnostics, handleOpenDiagnostics, handleDiagnosticsOpenChange } = useDiagnostics({
+		open: false,
+		isLocal,
+		runtimeVersion: "",
+		isRuntimeDisconnected,
+		streamError,
+		hasReceivedSnapshot,
+		workspaceId: currentProjectId,
+	});
+
+	// Wire the Electron desktop preload bridge for diagnostics (View → Diagnostics).
+	useEffect(() => {
+		const desktop = (window as unknown as Record<string, unknown>).desktop as
+			| { onOpenDiagnostics?: (cb: () => void) => () => void }
+			| undefined;
+		if (!desktop?.onOpenDiagnostics) return;
+		return desktop.onOpenDiagnostics(handleOpenDiagnostics);
+	}, [handleOpenDiagnostics]);
+
+	// Also expose a direct callable so E2E tests can trigger diagnostics
+	// without relying on IPC round-trip timing.
+	useEffect(() => {
+		(window as unknown as Record<string, unknown>).__kanbanOpenDiagnostics = handleOpenDiagnostics;
+		return () => {
+			delete (window as unknown as Record<string, unknown>).__kanbanOpenDiagnostics;
+		};
+	}, [handleOpenDiagnostics]);
+
 	const {
 		markConnectionReady: markTerminalConnectionReady,
 		prepareWaitForConnection: prepareWaitForTerminalConnectionReady,
@@ -498,6 +553,61 @@ export default function App(): ReactElement {
 		lastStreamErrorRef.current = streamError;
 	}, [isRuntimeDisconnected, streamError]);
 
+	// -- Reconnection banner lifecycle (remote mode only) --
+	useEffect(() => {
+		// Clean up any pending auto-dismiss timer when unmounting or deps change.
+		return () => {
+			if (reconnectionBannerTimerRef.current !== null) {
+				window.clearTimeout(reconnectionBannerTimerRef.current);
+				reconnectionBannerTimerRef.current = null;
+			}
+		};
+	}, []);
+
+	useEffect(() => {
+		if (isLocal) {
+			// In local mode, don't show the reconnection banner.
+			wasDisconnectedRef.current = false;
+			setReconnectionBannerStatus(null);
+			return;
+		}
+
+		if (isRuntimeDisconnected) {
+			wasDisconnectedRef.current = true;
+			setReconnectionBannerStatus("reconnecting");
+			// Clear any pending reconnected auto-dismiss timer.
+			if (reconnectionBannerTimerRef.current !== null) {
+				window.clearTimeout(reconnectionBannerTimerRef.current);
+				reconnectionBannerTimerRef.current = null;
+			}
+			return;
+		}
+
+		// Connection was restored after being disconnected in remote mode.
+		if (wasDisconnectedRef.current) {
+			wasDisconnectedRef.current = false;
+			setReconnectionBannerStatus("reconnected");
+			// Auto-dismiss after 2 seconds.
+			reconnectionBannerTimerRef.current = window.setTimeout(() => {
+				setReconnectionBannerStatus(null);
+				reconnectionBannerTimerRef.current = null;
+			}, 2000);
+		}
+	}, [isLocal, isRuntimeDisconnected]);
+
+	const handleReconnectionBannerRetry = useCallback(() => {
+		// Force a page reload to re-establish the WebSocket connection.
+		window.location.reload();
+	}, []);
+
+	const handleReconnectionBannerDismiss = useCallback(() => {
+		setReconnectionBannerStatus(null);
+		if (reconnectionBannerTimerRef.current !== null) {
+			window.clearTimeout(reconnectionBannerTimerRef.current);
+			reconnectionBannerTimerRef.current = null;
+		}
+	}, []);
+
 	useEffect(() => {
 		setSelectedTaskId(null);
 		resetTaskEditorState();
@@ -750,6 +860,14 @@ export default function App(): ReactElement {
 	return (
 		<LayoutCustomizationsProvider onResetBottomTerminalLayoutCustomizations={resetBottomTerminalLayoutCustomizations}>
 			<div className="flex h-[100svh] min-w-0 overflow-hidden">
+				{reconnectionBannerStatus !== null ? (
+					<ReconnectionBanner
+						status={reconnectionBannerStatus}
+						attemptCount={reconnectAttemptCount}
+						onRetry={handleReconnectionBannerRetry}
+						onDismiss={handleReconnectionBannerDismiss}
+					/>
+				) : null}
 				{!selectedCard ? (
 					<ProjectNavigationPanel
 						projects={displayedProjects}
@@ -764,9 +882,7 @@ export default function App(): ReactElement {
 							void handleSelectProject(projectId);
 						}}
 						onRemoveProject={handleRemoveProject}
-						onAddProject={() => {
-							void handleAddProject();
-						}}
+						onAddProject={gatedHandleAddProject}
 					/>
 				) : null}
 				<div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -843,12 +959,7 @@ export default function App(): ReactElement {
 										<p className="text-[13px] text-text-secondary">
 											Add a git repository to start using Kanban.
 										</p>
-										<Button
-											variant="primary"
-											onClick={() => {
-												void handleAddProject();
-											}}
-										>
+										<Button variant="primary" onClick={gatedHandleAddProject}>
 											Add Project
 										</Button>
 									</div>
@@ -1039,6 +1150,11 @@ export default function App(): ReactElement {
 					onShowStartupOnboardingDialog={handleShowStartupOnboardingDialog}
 					onResetAllState={handleResetAllState}
 				/>
+				<DiagnosticsDialog
+					open={isDiagnosticsOpen}
+					onOpenChange={handleDiagnosticsOpenChange}
+					diagnostics={diagnostics}
+				/>
 				<TaskCreateDialog
 					open={isInlineTaskCreateOpen}
 					onOpenChange={handleCreateDialogOpenChange}
@@ -1165,6 +1281,12 @@ export default function App(): ReactElement {
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialog>
+				<ServerDirectoryBrowser
+					open={isServerDirectoryBrowserOpen}
+					onOpenChange={setIsServerDirectoryBrowserOpen}
+					workspaceId={currentProjectId}
+					onSelect={handleServerDirectorySelected}
+				/>
 			</div>
 		</LayoutCustomizationsProvider>
 	);

@@ -65,13 +65,17 @@ export interface UseProjectNavigationResult {
 	latestTaskReadyForReview: ReturnType<typeof useRuntimeStateStream>["latestTaskReadyForReview"];
 	latestMcpAuthStatuses: ReturnType<typeof useRuntimeStateStream>["latestMcpAuthStatuses"];
 	clineSessionContextVersion: ReturnType<typeof useRuntimeStateStream>["clineSessionContextVersion"];
+	runtimeVersion: string;
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
 	hasNoProjects: boolean;
 	isProjectSwitching: boolean;
+	isLocal: boolean;
+	reconnectAttemptCount: number;
 	handleSelectProject: (projectId: string) => void;
 	handleAddProject: () => Promise<void>;
+	handleAddProjectByPath: (path: string, initializeGit?: boolean) => Promise<void>;
 	handleConfirmInitializeGitProject: () => Promise<void>;
 	handleCancelInitializeGitProject: () => void;
 	handleRemoveProject: (projectId: string) => Promise<boolean>;
@@ -100,9 +104,12 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestTaskReadyForReview,
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
+		runtimeVersion,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,
+		isLocal,
+		reconnectAttemptCount,
 	} = useRuntimeStateStream(requestedProjectId);
 
 	const hasNoProjects = hasReceivedSnapshot && projects.length === 0 && currentProjectId === null;
@@ -319,13 +326,17 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestTaskReadyForReview,
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
+		runtimeVersion,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,
 		hasNoProjects,
 		isProjectSwitching,
+		isLocal,
+		reconnectAttemptCount,
 		handleSelectProject,
 		handleAddProject,
+		handleAddProjectByPath: addProjectByPath,
 		handleConfirmInitializeGitProject,
 		handleCancelInitializeGitProject,
 		handleRemoveProject,
