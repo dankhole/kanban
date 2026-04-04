@@ -95,7 +95,7 @@ export default defineConfig({
 		strictPort: true,
 		proxy: {
 			"/api": {
-				target: "http://127.0.0.1:3484",
+				target: `http://127.0.0.1:${process.env.KANBAN_RUNTIME_PORT || "3484"}`,
 				changeOrigin: true,
 				ws: true,
 			},
