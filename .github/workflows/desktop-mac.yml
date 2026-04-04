@@ -1,0 +1,107 @@
+name: Desktop — macOS Sign & Notarize
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "Target architecture"
+        required: true
+        type: choice
+        options:
+          - arm64
+          - x64
+        default: arm64
+  # Also run on pushes that touch the desktop package (for build verification)
+  push:
+    branches: [main]
+    paths:
+      - "packages/desktop/**"
+      - ".github/workflows/desktop-mac.yml"
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}-${{ inputs.arch || 'arm64' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build macOS (${{ inputs.arch || 'arm64' }})
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web-ui dependencies
+        run: npm ci --prefix web-ui
+
+      - name: Build runtime + web-ui
+        run: npm run build
+
+      - name: Install desktop dependencies
+        working-directory: packages/desktop
+        run: npm install
+
+      - name: Build desktop TypeScript
+        working-directory: packages/desktop
+        run: npm run build:ts
+
+      - name: Rebuild node-pty for Electron
+        working-directory: packages/desktop
+        run: npm run rebuild:pty
+
+      - name: Package and sign macOS DMG
+        working-directory: packages/desktop
+        run: |
+          ARCH="${{ inputs.arch || 'arm64' }}"
+          npx electron-builder --mac dmg --"$ARCH" --config electron-builder.yml
+        env:
+          # ── Code Signing ──
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # ── Notarization ──
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify code signature
+        working-directory: packages/desktop
+        run: |
+          DMG=$(ls out/*.dmg | head -1)
+          echo "Verifying: $DMG"
+
+          # Mount the DMG and verify the .app inside
+          MOUNT_DIR=$(mktemp -d)
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
+          APP=$(find "$MOUNT_DIR" -name "*.app" -maxdepth 1 | head -1)
+
+          if [ -n "$APP" ]; then
+            echo "Checking codesign on $APP …"
+            codesign --verify --deep --strict "$APP" && echo "✅ Code signature valid" || echo "⚠️ Code signature check failed (expected in unsigned builds)"
+
+            echo "Checking notarization staple …"
+            xcrun stapler validate "$APP" && echo "✅ Notarization staple valid" || echo "⚠️ Staple check failed (expected in unsigned builds)"
+          else
+            echo "⚠️ No .app found in DMG"
+          fi
+
+          hdiutil detach "$MOUNT_DIR" -quiet || true
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanban-mac-${{ inputs.arch || 'arm64' }}
+          path: packages/desktop/out/*.dmg
+          if-no-files-found: error

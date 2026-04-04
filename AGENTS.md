@@ -36,6 +36,8 @@ Git guardrails
 - NEVER commit unless user asks.
 
 GitHub issues
+- NEVER create GitHub issues unless the user explicitly asks you to create one. No exceptions.
+
 When reading issues:
 - Always read all comments on the issue.
 - Use this command to get everything in one call:

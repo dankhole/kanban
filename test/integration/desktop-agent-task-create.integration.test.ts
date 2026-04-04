@@ -114,6 +114,7 @@ function runTaskCreate(
 
 describe("desktop agent task create via env var propagation", { timeout: 60_000 }, () => {
 	let runtime: RuntimeHandle | null = null;
+	const cleanups: Array<() => void> = [];
 
 	afterEach(async () => {
 		if (runtime) {
@@ -121,10 +122,15 @@ describe("desktop agent task create via env var propagation", { timeout: 60_000 
 			runtime = null;
 		}
 		delete process.env.KANBAN_AUTH_TOKEN;
+		for (const cleanup of cleanups) {
+			cleanup();
+		}
+		cleanups.length = 0;
 	});
 
 	it("creates a task when KANBAN_AUTH_TOKEN is set in the child env", async () => {
-		const { path: tempDir } = createTempDir("desktop-agent-task-create");
+		const { path: tempDir, cleanup } = createTempDir("desktop-agent-task-create");
+		cleanups.push(cleanup);
 		initGitRepository(tempDir);
 
 		const port = await getAvailablePort();
@@ -156,7 +162,8 @@ describe("desktop agent task create via env var propagation", { timeout: 60_000 
 	});
 
 	it("task create fails without auth token when runtime requires auth", async () => {
-		const { path: tempDir } = createTempDir("desktop-agent-no-auth");
+		const { path: tempDir, cleanup } = createTempDir("desktop-agent-no-auth");
+		cleanups.push(cleanup);
 		initGitRepository(tempDir);
 
 		const port = await getAvailablePort();

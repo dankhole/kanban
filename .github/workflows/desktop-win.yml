@@ -1,0 +1,102 @@
+name: Desktop — Windows Sign
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "Target architecture"
+        required: true
+        type: choice
+        options:
+          - x64
+        default: x64
+  # Also run on pushes that touch the desktop package (for build verification)
+  push:
+    branches: [main]
+    paths:
+      - "packages/desktop/**"
+      - ".github/workflows/desktop-win.yml"
+
+concurrency:
+  group: desktop-win-${{ github.ref }}-${{ inputs.arch || 'x64' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows (${{ inputs.arch || 'x64' }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web-ui dependencies
+        run: npm ci --prefix web-ui
+
+      - name: Build runtime + web-ui
+        run: npm run build
+
+      - name: Install desktop dependencies
+        working-directory: packages/desktop
+        run: npm install
+
+      - name: Build desktop TypeScript
+        working-directory: packages/desktop
+        run: npm run build:ts
+
+      - name: Package and sign Windows installer
+        working-directory: packages/desktop
+        run: npx electron-builder --win nsis --${{ inputs.arch || 'x64' }} --config electron-builder.yml
+        env:
+          # ── Windows Code Signing (PFX / OV) ──
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # ── Windows Code Signing (Azure Trusted Signing / EV) ──
+          AZURE_SIGN_ENDPOINT: ${{ secrets.AZURE_SIGN_ENDPOINT }}
+          AZURE_SIGN_CERT_PROFILE: ${{ secrets.AZURE_SIGN_CERT_PROFILE }}
+          AZURE_SIGN_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGN_CODE_SIGNING_ACCOUNT }}
+
+      - name: Verify code signature
+        working-directory: packages/desktop
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path out -Filter "*.exe" | Select-Object -First 1
+          if ($exe) {
+            Write-Host "Verifying: $($exe.FullName)"
+            $sig = Get-AuthenticodeSignature -FilePath $exe.FullName
+            Write-Host "Status: $($sig.Status)"
+            Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+            Write-Host "Timestamp: $($sig.TimeStamperCertificate.Subject)"
+            if ($sig.Status -eq "Valid") {
+              Write-Host "✅ Code signature valid"
+            } else {
+              Write-Host "⚠️ Signature status: $($sig.Status) (expected in unsigned builds)"
+            }
+          } else {
+            Write-Host "⚠️ No .exe found in out/"
+          }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanban-win-${{ inputs.arch || 'x64' }}
+          path: |
+            packages/desktop/out/*.exe
+            packages/desktop/out/*.blockmap
+            packages/desktop/out/*.yml
+            packages/desktop/out/*.yaml
+          if-no-files-found: error
+

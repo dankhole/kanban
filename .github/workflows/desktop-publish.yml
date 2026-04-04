@@ -1,0 +1,176 @@
+name: Desktop Publish
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Builds Electron desktop artifacts for macOS, Windows, and Linux, then uploads
+# them to a GitHub Release.
+#
+# Trigger: manual workflow_dispatch with a tag input (e.g. v1.2.3).
+# The tag must already exist and match packages/desktop/package.json version.
+#
+# Code signing:
+#   macOS  — CSC_LINK + notarization via afterSign hook (Task 3.2)
+#   Windows — custom win.sign hook delegates to signtool / AzureSignTool (Task 3.3)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish desktop artifacts for (example: v1.2.3)"
+        required: true
+        type: string
+
+concurrency:
+  group: desktop-publish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Validate tag and version
+  # ────────────────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve and verify tag
+        id: resolve
+        run: |
+          TAG="${{ inputs.tag }}"
+
+          # Tag must exist
+          git fetch origin --tags
+          if ! git show-ref --verify --quiet "refs/tags/$TAG"; then
+            echo "Error: tag '$TAG' does not exist"
+            exit 1
+          fi
+          git checkout --detach "refs/tags/${TAG}^{commit}"
+
+          # Tag must match semver pattern
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Error: tag must match vX.Y.Z (with optional prerelease suffix)"
+            exit 1
+          fi
+
+          # Tag must match packages/desktop/package.json version
+          DESKTOP_VERSION=$(node -p "require('./packages/desktop/package.json').version")
+          EXPECTED_TAG="v${DESKTOP_VERSION}"
+          if [ "$TAG" != "$EXPECTED_TAG" ]; then
+            echo "Error: tag '$TAG' does not match desktop package version '$EXPECTED_TAG'"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$DESKTOP_VERSION" >> "$GITHUB_OUTPUT"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Build matrix — one job per OS
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            build-args: --mac --config electron-builder.yml
+          - os: ubuntu-latest
+            build-args: --linux --config electron-builder.yml
+          - os: windows-latest
+            build-args: --win --config electron-builder.yml
+    defaults:
+      run:
+        working-directory: packages/desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Checkout tag commit
+        run: git checkout --detach "refs/tags/${{ needs.validate.outputs.tag }}^{commit}"
+        working-directory: .
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      # Install root dependencies (kanban runtime is a local file: dependency)
+      - name: Install root dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Install web-ui dependencies
+        run: npm ci --prefix web-ui
+        working-directory: .
+
+      # Build the kanban runtime so the desktop file: dependency resolves
+      - name: Build kanban runtime
+        run: npm run build
+        working-directory: .
+
+      # Install desktop-specific dependencies
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: packages/desktop
+
+      # Rebuild native modules for Electron
+      - name: Rebuild native modules
+        run: npx electron-rebuild -f -w node-pty
+
+      # Compile TypeScript
+      - name: Build TypeScript
+        run: npx tsc -p tsconfig.build.json
+
+      # Build distributable artifacts
+      # GH_TOKEN is used by electron-builder to upload artifacts to the release.
+      # Signing env vars are platform-gated: the hooks are no-ops when vars are missing.
+      - name: Build desktop artifacts
+        run: npx electron-builder ${{ matrix.build-args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── macOS Code Signing + Notarization ──
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # ── Windows Code Signing (PFX / OV) ──
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # ── Windows Code Signing (Azure Trusted Signing / EV) ──
+          AZURE_SIGN_ENDPOINT: ${{ secrets.AZURE_SIGN_ENDPOINT }}
+          AZURE_SIGN_CERT_PROFILE: ${{ secrets.AZURE_SIGN_CERT_PROFILE }}
+          AZURE_SIGN_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGN_CODE_SIGNING_ACCOUNT }}
+
+      # Upload artifacts as a workflow artifact for traceability
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            packages/desktop/out/*.dmg
+            packages/desktop/out/*.zip
+            packages/desktop/out/*.exe
+            packages/desktop/out/*.AppImage
+            packages/desktop/out/*.yml
+            packages/desktop/out/*.yaml
+            packages/desktop/out/*.blockmap
+          if-no-files-found: warn
+          retention-days: 30
