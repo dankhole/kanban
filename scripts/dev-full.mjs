@@ -5,7 +5,10 @@
  */
 import { createServer, connect } from "node:net";
 import { spawn } from "node:child_process";
+import treeKill from "tree-kill";
 import open from "open";
+
+const isWindows = process.platform === "win32";
 
 function findPort(start) {
 	return new Promise((resolve) => {
@@ -44,7 +47,8 @@ console.log(`  Web UI:       http://127.0.0.1:4173\n`);
 
 const env = { ...process.env, KANBAN_RUNTIME_PORT: String(port) };
 
-const runtime = spawn("node_modules/.bin/tsx", ["watch", "src/cli.ts", "--port", String(port), "--no-open"], {
+const tsxBin = isWindows ? "node_modules/.bin/tsx.cmd" : "node_modules/.bin/tsx";
+const runtime = spawn(tsxBin, ["watch", "src/cli.ts", "--port", String(port), "--no-open"], {
 	env,
 	stdio: "inherit",
 });
@@ -55,6 +59,7 @@ await waitForPort(port);
 const vite = spawn("npm", ["run", "web:dev"], {
 	env,
 	stdio: "inherit",
+	shell: isWindows,
 });
 
 // Auto-open browser after a short delay for Vite to start
@@ -62,12 +67,16 @@ setTimeout(() => {
 	open("http://127.0.0.1:4173");
 }, 2000);
 
+let exiting = false;
 function cleanup() {
-	runtime.kill();
-	vite.kill();
+	if (exiting) return;
+	exiting = true;
+	if (runtime.pid) treeKill(runtime.pid);
+	if (vite.pid) treeKill(vite.pid);
 	process.exit();
 }
 
 process.on("SIGTERM", cleanup);
 process.on("SIGINT", cleanup);
 runtime.on("exit", cleanup);
+vite.on("exit", cleanup);
